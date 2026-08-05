@@ -1,0 +1,165 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* 
+  ==========================================================================
+  KARUNAGRID DESIGN SYSTEM TOKENS & UTILITIES
+  ==========================================================================
+  Colors:
+    - Primary Olive:      #645e45 (serene-primary)
+    - Primary Hover:      #4c472f (serene-primary-hover)
+    - Primary Container:  #b5ad8f (serene-primary-container)
+    - Background Warm:    #fff9ef (serene-bg)
+    - Card Low:           #faf3e5 (serene-low)
+    - Card Container:     #f4ede0 (serene-container)
+    - Outline Subtle:     #cbc6ba (serene-outline-subtle)
+    - Dark Text:          #1e1b14 (serene-text) - WCAG AA compliant on light bg
+    - Muted Body Text:    #3d392e (high contrast muted)
+    - Secondary Accent:   #695e3d (serene-secondary)
+  
+  Typography & Readability:
+    - Base body font size: 16px minimum for elderly / caregiver readability.
+    - Comfortable line spacing (leading-relaxed).
+  ==========================================================================
+*/
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-family: 'Manrope', system-ui, -apple-system, sans-serif;
+    color: #1e1b14;
+    background-color: #fff9ef;
+    font-size: 16px;
+  }
+
+  body {
+    background-color: #fff9ef;
+    color: #1e1b14;
+    overflow-x: hidden;
+    line-height: 1.6;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #1e1b14;
+  }
+}
+
+@layer components {
+  /* Unified Card Design */
+  .serene-card {
+    background-color: #faf3e5;
+    border-radius: 1.25rem;
+    padding: 1.75rem;
+    border: 1px solid #cbc6ba;
+    box-shadow: 0 4px 12px -2px rgba(30, 27, 20, 0.05);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .serene-card:hover {
+    box-shadow: 0 16px 32px -6px rgba(100, 94, 69, 0.14);
+    border-color: rgba(100, 94, 69, 0.4);
+    background-color: #f4ede0;
+  }
+
+  /* Icon-in-Circle Treatment */
+  .serene-icon-badge {
+    padding: 0.875rem;
+    background-color: #fff9ef;
+    border-radius: 1rem;
+    color: #645e45;
+    box-shadow: 0 2px 8px -2px rgba(30, 27, 20, 0.05);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  /* Standard Pill Tag */
+  .serene-tag {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #695e3d;
+    background-color: rgba(255, 249, 239, 0.9);
+    padding: 0.35rem 0.75rem;
+    border-radius: 9999px;
+    border: 1px solid #cbc6ba;
+  }
+
+  /* Primary Button Standard */
+  .btn-serene-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1.75rem;
+    font-weight: 700;
+    font-size: 1rem;
+    color: #ffffff;
+    background-color: #645e45;
+    border-radius: 9999px;
+    box-shadow: 0 8px 24px -4px rgba(100, 94, 69, 0.25);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .btn-serene-primary:hover {
+    background-color: #4c472f;
+    box-shadow: 0 12px 28px -4px rgba(100, 94, 69, 0.35);
+    transform: translateY(-2px);
+  }
+
+  /* Secondary Outline Button Standard */
+  .btn-serene-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.875rem 1.75rem;
+    font-weight: 600;
+    font-size: 1rem;
+    color: #1e1b14;
+    background-color: #ffffff;
+    border: 2px solid #645e45;
+    border-radius: 9999px;
+    box-shadow: 0 2px 8px -2px rgba(30, 27, 20, 0.05);
+    transition: all 0.2s ease-in-out;
+  }
+
+  .btn-serene-secondary:hover {
+    background-color: #645e45;
+    color: #ffffff;
+    transform: translateY(-2px);
+  }
+}
+
+/* Reduced motion accessibility support */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f4ede0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #b5ad8f;
+  border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #645e45;
+}
