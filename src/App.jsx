@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
 import PatientDashboard from './pages/PatientDashboard';
 import CaregiverDashboard from './pages/CaregiverDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
@@ -33,7 +35,7 @@ function App() {
   };
 
   const handleUnauthenticated = () => {
-    navigateTo('/');
+    navigateTo('/login');
   };
 
   const handleRoleMismatch = (actualRole) => {
@@ -41,6 +43,14 @@ function App() {
   };
 
   const renderCurrentView = () => {
+    if (currentPath === '/login') {
+      return <LoginPage onNavigate={navigateTo} />;
+    }
+
+    if (currentPath === '/register') {
+      return <RegisterPage onNavigate={navigateTo} />;
+    }
+
     if (currentPath === '/dashboard/patient') {
       return (
         <ProtectedRoute
