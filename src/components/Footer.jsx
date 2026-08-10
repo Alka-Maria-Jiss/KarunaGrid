@@ -119,7 +119,7 @@ export default function Footer({ onOpenRoleLogin }) {
                   className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
                 >
                   <ShieldAlert className="w-4 h-4 text-amber-300" />
-                  <span>Nurse & Field Team</span>
+                  <span>Nurse Portal</span>
                 </button>
               </li>
               <li>

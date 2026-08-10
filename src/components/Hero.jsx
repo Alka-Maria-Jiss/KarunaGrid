@@ -15,26 +15,26 @@ export default function Hero({ onOpenRegister, onLearnMore }) {
         backgroundRepeat: 'no-repeat',
       }}
     >
-      {/* Enhanced dark gradient overlay for WCAG AA text readability */}
+      {/* Enhanced dark radial/linear gradient overlay for WCAG AA text readability */}
       <div
         className="absolute inset-0 pointer-events-none z-0"
         style={{
           background:
-            'linear-gradient(105deg, rgba(0,0,0,0.78) 0%, rgba(0,0,0,0.52) 55%, rgba(0,0,0,0.22) 100%)',
+            'radial-gradient(circle at center, rgba(0,0,0,0.45) 0%, rgba(0,0,0,0.72) 100%)',
         }}
         aria-hidden="true"
       />
 
       {/* Hero Content */}
-      <div className="relative z-10 w-full max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 pt-[150px] pb-16 flex flex-col items-start justify-center">
-        <div className="max-w-[700px] w-full text-left flex flex-col items-start">
+      <div className="relative z-10 w-full max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 pt-[120px] pb-16 flex flex-col items-center justify-center text-center">
+        <div className="max-w-4xl w-full text-center flex flex-col items-center justify-center">
 
           {/* Phase 1 Badge */}
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: 'easeOut', delay: 0.1 }}
-            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full border border-white/40 bg-black/30 backdrop-blur-md text-white text-xs sm:text-sm font-semibold mb-6 tracking-wide"
+            className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-white/40 bg-black/40 backdrop-blur-md text-white text-xs sm:text-sm font-semibold mb-8 tracking-wide shadow-lg"
           >
             <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
             <span>Community Palliative Care Platform</span>
@@ -45,8 +45,8 @@ export default function Hero({ onOpenRegister, onLearnMore }) {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, ease: 'easeOut', delay: 0.2 }}
-            className="font-extrabold text-white leading-[1.1] tracking-tight mb-6 max-w-[700px] text-left drop-shadow-md"
-            style={{ fontSize: 'clamp(2.5rem, 5.5vw, 4.25rem)' }}
+            className="font-extrabold text-white leading-[1.15] tracking-tight mb-10 max-w-4xl text-center drop-shadow-xl"
+            style={{ fontSize: 'clamp(2.75rem, 6.5vw, 5rem)' }}
           >
             Bringing{' '}
             <span
@@ -62,24 +62,12 @@ export default function Hero({ onOpenRegister, onLearnMore }) {
             , Dignity &amp; Peace to Every Home.
           </motion.h1>
 
-          {/* Subheading — Left-aligned with 680px max width & 22px font size */}
-          <motion.p
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, ease: 'easeOut', delay: 0.35 }}
-            className="text-white/95 mb-[40px] font-normal drop-shadow-sm max-w-[680px] text-left leading-[1.7] text-[1.125rem] sm:text-[22px]"
-          >
-            KarunaGrid connects patients, family caregivers, doctors, field nurses, and community
-            coordinators into a seamless circle of care. Designed for warmth, privacy, and true
-            human connection.
-          </motion.p>
-
           {/* Action Buttons */}
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.55, ease: 'easeOut', delay: 0.5 }}
-            className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 text-left"
+            transition={{ duration: 0.55, ease: 'easeOut', delay: 0.35 }}
+            className="flex flex-col sm:flex-row items-center justify-center gap-5 w-full sm:w-auto text-center"
           >
             {/* Primary CTA — High contrast olive button */}
             <button
@@ -100,7 +88,7 @@ export default function Hero({ onOpenRegister, onLearnMore }) {
               href="#about"
               id="hero-learn-more-btn"
               onClick={onLearnMore}
-              className="btn-serene-secondary text-base sm:text-lg px-7 py-4"
+              className="btn-serene-secondary text-base sm:text-lg px-7 py-4 shadow-md"
             >
               <span>What is Palliative Care?</span>
             </a>
@@ -115,19 +103,6 @@ export default function Hero({ onOpenRegister, onLearnMore }) {
           #hero {
             height: 100svh !important;
             min-height: 100svh !important;
-          }
-          #hero .flex-col {
-            align-items: center !important;
-            text-align: center !important;
-          }
-          #hero h1 {
-            text-align: center;
-          }
-          #hero p {
-            text-align: center;
-          }
-          #hero .flex-col.sm\\:flex-row {
-            flex-direction: column !important;
           }
         }
       `}</style>
