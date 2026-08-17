@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { LogIn, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 import apiClient from '../api/apiClient';
@@ -17,6 +17,13 @@ export default function LoginPage({ onNavigate }) {
   const [rejectionReason, setRejectionReason] = useState(null);
 
   const { showSuccess, showError } = useToast();
+
+  useEffect(() => {
+    // Clear any stale invalid auth tokens on login screen mount
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_info');
+  }, []);
 
   const handleNavigate = (path) => {
     if (onNavigate) {

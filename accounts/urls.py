@@ -17,6 +17,31 @@ from .views import (
     AdminCreateStaffView,
     AdminOnboardDoctorView,
     AdminOnboardNurseView,
+    AdminStatsView,
+    AdminUserListView,
+    AdminUserToggleStatusView,
+    AdminPatientListView,
+    AdminActivityLogView,
+    AdminWelfareSchemeListView,
+    AdminWelfareSchemeDetailView,
+    AdminWelfareApplicationListView,
+    AdminWelfareApplicationReviewView,
+    AdminEquipmentListView,
+    AdminEquipmentTypeCreateView,
+    AdminEquipmentUnitCreateView,
+    AdminEquipmentUnitStatusUpdateView,
+    AdminNotificationOverviewView,
+    PatientDashboardView,
+    PatientProfileView,
+    PatientMedicalHistoryView,
+    PatientPrescriptionsView,
+    PatientLabReportsView,
+    PatientNutritionView,
+    PatientHomeVisitsView,
+    PatientEquipmentView,
+    PatientWelfareView,
+    PatientCaregiverView,
+    PatientTimelineView,
 )
 
 urlpatterns = [
@@ -27,7 +52,7 @@ urlpatterns = [
     path('documents/view/', SecureDocumentView.as_view(), name='secure_document_view'),
     path('me/', CurrentUserProfileView.as_view(), name='auth_me'),
 
-    # Doctor Patient Approval routes
+    # Doctor Patient Approval routes (Preserved strictly for Doctor workflow)
     path('doctor/patients/pending/', DoctorPendingPatientsView.as_view(), name='doctor_pending_patients'),
     path('doctor/patients/<int:patient_id>/', DoctorPatientDetailView.as_view(), name='doctor_patient_detail'),
     path('doctor/patients/<int:patient_id>/approve/', DoctorApprovePatientView.as_view(), name='doctor_approve_patient'),
@@ -41,4 +66,34 @@ urlpatterns = [
     path('admin/staff/create/', AdminCreateStaffView.as_view(), name='admin_create_staff'),
     path('admin/onboard-doctor/', AdminOnboardDoctorView.as_view(), name='admin_onboard_doctor'),
     path('admin/onboard-nurse/', AdminOnboardNurseView.as_view(), name='admin_onboard_nurse'),
+
+    # Redesigned Phase 1 Administrator Dashboard & Management APIs
+    path('admin/stats/', AdminStatsView.as_view(), name='admin_stats'),
+    path('admin/users/', AdminUserListView.as_view(), name='admin_users'),
+    path('admin/users/<int:user_id>/toggle-status/', AdminUserToggleStatusView.as_view(), name='admin_user_toggle_status'),
+    path('admin/patients/', AdminPatientListView.as_view(), name='admin_patients_readonly'),
+    path('admin/activities/', AdminActivityLogView.as_view(), name='admin_activities'),
+    path('admin/welfare-schemes/', AdminWelfareSchemeListView.as_view(), name='admin_welfare_schemes'),
+    path('admin/welfare-schemes/<int:scheme_id>/', AdminWelfareSchemeDetailView.as_view(), name='admin_welfare_scheme_detail'),
+    path('admin/welfare-applications/', AdminWelfareApplicationListView.as_view(), name='admin_welfare_applications'),
+    path('admin/welfare-applications/<int:application_id>/review/', AdminWelfareApplicationReviewView.as_view(), name='admin_welfare_application_review'),
+    path('admin/equipment/', AdminEquipmentListView.as_view(), name='admin_equipment'),
+    path('admin/equipment/types/', AdminEquipmentTypeCreateView.as_view(), name='admin_equipment_type_create'),
+    path('admin/equipment/units/', AdminEquipmentUnitCreateView.as_view(), name='admin_equipment_unit_create'),
+    path('admin/equipment/units/<int:unit_id>/status/', AdminEquipmentUnitStatusUpdateView.as_view(), name='admin_equipment_unit_status'),
+    path('admin/notifications/', AdminNotificationOverviewView.as_view(), name='admin_notifications'),
+
+    # Official Phase 1 Patient Portal APIs (Authenticated Patient Only)
+    path('patient/dashboard/', PatientDashboardView.as_view(), name='patient_dashboard'),
+    path('patient/profile/', PatientProfileView.as_view(), name='patient_profile'),
+    path('patient/medical-history/', PatientMedicalHistoryView.as_view(), name='patient_medical_history'),
+    path('patient/prescriptions/', PatientPrescriptionsView.as_view(), name='patient_prescriptions'),
+    path('patient/lab-reports/', PatientLabReportsView.as_view(), name='patient_lab_reports'),
+    path('patient/nutrition/', PatientNutritionView.as_view(), name='patient_nutrition'),
+    path('patient/home-visits/', PatientHomeVisitsView.as_view(), name='patient_home_visits'),
+    path('patient/equipment/', PatientEquipmentView.as_view(), name='patient_equipment'),
+    path('patient/welfare/', PatientWelfareView.as_view(), name='patient_welfare'),
+    path('patient/caregiver/', PatientCaregiverView.as_view(), name='patient_caregiver'),
+    path('patient/timeline/', PatientTimelineView.as_view(), name='patient_timeline'),
 ]
+

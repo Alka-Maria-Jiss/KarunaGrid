@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import DashboardLayout from '../components/DashboardLayout';
-import { Stethoscope, UserCheck, FileText, CheckCircle2, XCircle, AlertCircle, Eye, RefreshCw, Phone, MapPin } from 'lucide-react';
+import { Stethoscope, UserCheck, FileText, CheckCircle2, XCircle, AlertCircle, Eye, RefreshCw, Phone, MapPin, Video } from 'lucide-react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
+import TelemedicineDoctorSection from '../components/TelemedicineDoctorSection';
 
 export default function DoctorDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('approvals');
@@ -73,6 +74,43 @@ export default function DoctorDashboard({ user, onLogout }) {
     }
   };
 
+  const handleOpenDocument = async (docUrl) => {
+    if (!docUrl) return;
+    try {
+      const token = localStorage.getItem('access_token');
+      let fullUrl = docUrl.startsWith('http')
+        ? docUrl
+        : `http://127.0.0.1:8000${docUrl.startsWith('/') ? '' : '/'}${docUrl}`;
+
+      if (token && !fullUrl.includes('token=')) {
+        fullUrl += `${fullUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+      }
+
+      const res = await fetch(fullUrl, {
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+        },
+      });
+
+      if (!res.ok) {
+        let errorMsg = 'Could not access document.';
+        try {
+          const errData = await res.json();
+          errorMsg = errData.detail || errorMsg;
+        } catch (_) {}
+        showError(errorMsg);
+        return;
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+    } catch (err) {
+      console.error("Failed to open document:", err);
+      showError("Could not open document. Please check server connection.");
+    }
+  };
+
   return (
     <DashboardLayout user={user} onLogout={onLogout}>
       <div className="space-y-6">
@@ -80,6 +118,18 @@ export default function DoctorDashboard({ user, onLogout }) {
         {/* TOP TAB CONTROL */}
         <div className="flex items-center justify-between border-b border-serene-outline-subtle pb-3">
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('telemedicine')}
+              className={`px-4 py-2 text-sm font-extrabold rounded-xl transition-all flex items-center gap-2 ${
+                activeTab === 'telemedicine'
+                  ? 'bg-serene-primary text-white shadow-sm'
+                  : 'bg-serene-container text-serene-muted hover:text-serene-text'
+              }`}
+            >
+              <Video className="w-4 h-4" />
+              <span>Telemedicine Portal</span>
+            </button>
             <button
               type="button"
               onClick={() => setActiveTab('approvals')}
@@ -116,7 +166,9 @@ export default function DoctorDashboard({ user, onLogout }) {
           </button>
         </div>
 
-        {activeTab === 'approvals' ? (
+        {activeTab === 'telemedicine' ? (
+          <TelemedicineDoctorSection showSuccess={showSuccess} showError={showError} />
+        ) : activeTab === 'approvals' ? (
           <div className="space-y-4">
             <h3 className="text-base font-extrabold text-serene-text">
               Patient Registration Requests Requiring Review
@@ -234,15 +286,14 @@ export default function DoctorDashboard({ user, onLogout }) {
                 <div className="pt-3 border-t border-serene-outline-subtle">
                   <h4 className="font-extrabold text-serene-text mb-2">Discharge Summary / Referral Document</h4>
                   {selectedPatient.discharge_summary_url ? (
-                    <a
-                      href={selectedPatient.discharge_summary_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-serene-primary rounded-xl shadow-sm hover:bg-serene-primary-hover transition-all"
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDocument(selectedPatient.discharge_summary_url)}
+                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-serene-primary rounded-xl shadow-sm hover:bg-serene-primary-hover transition-all cursor-pointer"
                     >
                       <FileText className="w-4 h-4" />
                       <span>Open Secure Medical Discharge Summary Document</span>
-                    </a>
+                    </button>
                   ) : (
                     <p className="text-rose-600 font-bold">No document uploaded.</p>
                   )}

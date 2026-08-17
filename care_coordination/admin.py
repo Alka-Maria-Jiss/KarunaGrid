@@ -2,6 +2,8 @@ from django.contrib import admin
 from .models import (
     CaregiverPatientAssignment,
     TelemedicineConsultation,
+    TelemedicineConsultationNote,
+    TelemedicineFollowUp,
     HomeVisitSchedule,
     HomeVisitOccurrence,
     HomeVisitSummary,
@@ -18,9 +20,22 @@ class CaregiverPatientAssignmentAdmin(admin.ModelAdmin):
 
 @admin.register(TelemedicineConsultation)
 class TelemedicineConsultationAdmin(admin.ModelAdmin):
-    list_display = ('consultation_id', 'patient', 'doctor', 'requested_by', 'requested_datetime', 'scheduled_datetime', 'status')
-    list_filter = ('status',)
-    search_fields = ('patient__name', 'doctor__name', 'requested_by__email')
+    list_display = ('consultation_id', 'patient', 'doctor', 'requested_date', 'requested_time', 'scheduled_date', 'scheduled_start_time', 'status')
+    list_filter = ('status', 'priority')
+    search_fields = ('patient__name', 'doctor__name', 'reason', 'symptoms')
+
+
+@admin.register(TelemedicineConsultationNote)
+class TelemedicineConsultationNoteAdmin(admin.ModelAdmin):
+    list_display = ('note_id', 'consultation', 'doctor', 'patient', 'created_at')
+    search_fields = ('patient__name', 'doctor__name', 'notes', 'symptoms_discussed')
+
+
+@admin.register(TelemedicineFollowUp)
+class TelemedicineFollowUpAdmin(admin.ModelAdmin):
+    list_display = ('followup_id', 'original_consultation', 'patient', 'doctor', 'followup_date', 'followup_time', 'status')
+    list_filter = ('status', 'followup_type')
+    search_fields = ('patient__name', 'doctor__name', 'reason')
 
 
 @admin.register(HomeVisitSchedule)

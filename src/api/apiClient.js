@@ -33,8 +33,12 @@ function sanitizeError(error, responseData = null, status = null) {
   }
 
   if (status === 401) {
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_info');
+    const msg = responseData?.detail || (responseData?.non_field_errors ? responseData.non_field_errors[0] : 'Your session has expired. Please log in again.');
     return new ApiClientError(
-      'Your session has expired. Please log in again.',
+      msg,
       401,
       responseData
     );
@@ -82,7 +86,9 @@ export const apiClient = {
     const token = localStorage.getItem('access_token');
     const headers = { ...options.headers };
 
-    if (token) {
+    const isPublicEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register');
+
+    if (token && !isPublicEndpoint) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 

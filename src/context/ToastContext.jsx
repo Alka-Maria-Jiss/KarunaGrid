@@ -24,8 +24,24 @@ export function ToastProvider({ children }) {
     return id;
   }, [removeToast]);
 
+  const showSuccess = useCallback((message, duration = 4000) => {
+    return showToast(message, 'success', duration);
+  }, [showToast]);
+
+  const showError = useCallback((message, duration = 5000) => {
+    return showToast(message, 'error', duration);
+  }, [showToast]);
+
+  const showWarning = useCallback((message, duration = 4000) => {
+    return showToast(message, 'warning', duration);
+  }, [showToast]);
+
+  const showInfo = useCallback((message, duration = 4000) => {
+    return showToast(message, 'info', duration);
+  }, [showToast]);
+
   return (
-    <ToastContext.Provider value={{ showToast, removeToast }}>
+    <ToastContext.Provider value={{ showToast, showSuccess, showError, showWarning, showInfo, removeToast }}>
       {children}
       <Toast toasts={toasts} onDismiss={removeToast} />
     </ToastContext.Provider>

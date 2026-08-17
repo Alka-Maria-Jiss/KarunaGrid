@@ -7,11 +7,17 @@ class AssignmentStatus(models.TextChoices):
 
 
 class ConsultationStatus(models.TextChoices):
+    PENDING = 'Pending', 'Pending'
+    ACCEPTED = 'Accepted', 'Accepted'
+    SCHEDULED = 'Scheduled', 'Scheduled'
+    IN_PROGRESS = 'In Progress', 'In Progress'
+    COMPLETED = 'Completed', 'Completed'
+    REJECTED = 'Rejected', 'Rejected'
+    CANCELLED = 'Cancelled', 'Cancelled'
+    RESCHEDULED = 'Rescheduled', 'Rescheduled'
+    # Legacy choices for compatibility
     REQUESTED = 'Requested', 'Requested'
     APPROVED = 'Approved', 'Approved'
-    RESCHEDULED = 'Rescheduled', 'Rescheduled'
-    COMPLETED = 'Completed', 'Completed'
-    CANCELLED = 'Cancelled', 'Cancelled'
 
 
 class ScheduleFrequency(models.TextChoices):
@@ -69,20 +75,79 @@ class TelemedicineConsultation(models.Model):
     patient = models.ForeignKey('accounts.Patient', on_delete=models.CASCADE, db_column='patient_id')
     doctor = models.ForeignKey('accounts.Doctor', on_delete=models.CASCADE, db_column='doctor_id')
     requested_by = models.ForeignKey('accounts.User', on_delete=models.CASCADE, db_column='requested_by_user_id')
-    requested_datetime = models.DateTimeField(auto_now_add=True)
-    scheduled_datetime = models.DateTimeField(null=True, blank=True)
+    requested_date = models.DateField(null=True, blank=True)
+    requested_time = models.TimeField(null=True, blank=True)
+    scheduled_date = models.DateField(null=True, blank=True)
+    scheduled_start_time = models.TimeField(null=True, blank=True)
+    scheduled_end_time = models.TimeField(null=True, blank=True)
+    reason = models.TextField(null=True, blank=True)
+    symptoms = models.TextField(null=True, blank=True)
+    priority = models.CharField(
+        max_length=15, choices=UrgencyLevel.choices, default=UrgencyLevel.ROUTINE
+    )
+    patient_notes = models.TextField(null=True, blank=True)
     status = models.CharField(
-        max_length=20, choices=ConsultationStatus.choices, default=ConsultationStatus.REQUESTED
+        max_length=20, choices=ConsultationStatus.choices, default=ConsultationStatus.PENDING
     )
     meeting_link = models.CharField(max_length=255, null=True, blank=True)
+    rejection_reason = models.TextField(null=True, blank=True)
     notes = models.TextField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'telemedicine_consultations'
 
     def __str__(self):
-        return f"Consultation #{self.consultation_id} ({self.status})"
+        return f"Consultation #{self.consultation_id} - Patient #{self.patient_id} with Dr. #{self.doctor_id} ({self.status})"
+
+
+class TelemedicineConsultationNote(models.Model):
+    note_id = models.AutoField(primary_key=True)
+    consultation = models.ForeignKey(
+        'care_coordination.TelemedicineConsultation', on_delete=models.CASCADE, db_column='consultation_id', related_name='consultation_notes'
+    )
+    doctor = models.ForeignKey('accounts.Doctor', on_delete=models.CASCADE, db_column='doctor_id')
+    patient = models.ForeignKey('accounts.Patient', on_delete=models.CASCADE, db_column='patient_id')
+    symptoms_discussed = models.TextField(null=True, blank=True)
+    clinical_observations = models.TextField(null=True, blank=True)
+    advice = models.TextField(null=True, blank=True)
+    recommendations = models.TextField(null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'telemedicine_consultation_notes'
+
+    def __str__(self):
+        return f"Note #{self.note_id} for Consultation #{self.consultation_id}"
+
+
+class TelemedicineFollowUp(models.Model):
+    followup_id = models.AutoField(primary_key=True)
+    original_consultation = models.ForeignKey(
+        'care_coordination.TelemedicineConsultation', on_delete=models.CASCADE, db_column='original_consultation_id', related_name='followups'
+    )
+    patient = models.ForeignKey('accounts.Patient', on_delete=models.CASCADE, db_column='patient_id')
+    doctor = models.ForeignKey('accounts.Doctor', on_delete=models.CASCADE, db_column='doctor_id')
+    followup_date = models.DateField()
+    followup_time = models.TimeField()
+    reason = models.TextField(null=True, blank=True)
+    notes = models.TextField(null=True, blank=True)
+    followup_type = models.CharField(max_length=50, default='Telemedicine')
+    status = models.CharField(
+        max_length=20, choices=ConsultationStatus.choices, default=ConsultationStatus.SCHEDULED
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'telemedicine_followups'
+
+    def __str__(self):
+        return f"FollowUp #{self.followup_id} for Consultation #{self.original_consultation_id} on {self.followup_date}"
 
 
 class HomeVisitSchedule(models.Model):

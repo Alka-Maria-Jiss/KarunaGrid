@@ -76,7 +76,7 @@ export default function OnboardStaffForm({ role = 'doctor', onSuccess }) {
       <div className="flex items-center gap-3 border-b border-serene-outline-subtle pb-4">
         <div
           className={`p-3 rounded-2xl ${
-            isDoctor ? 'bg-sky-100 text-sky-800' : 'bg-indigo-100 text-indigo-800'
+            isDoctor ? 'bg-[#f4f2e9] text-[#645e45] border border-[#e2dec9]' : 'bg-[#f5f1ea] text-[#695e3d] border border-[#e7ded0]'
           }`}
         >
           <RoleIcon className="w-6 h-6" />
@@ -253,11 +253,7 @@ export default function OnboardStaffForm({ role = 'doctor', onSuccess }) {
           <button
             type="submit"
             disabled={isSubmitting}
-            className={`w-full py-3 px-5 text-xs sm:text-sm font-bold text-white rounded-xl shadow-md transition-all flex items-center justify-center gap-2 ${
-              isDoctor
-                ? 'bg-sky-600 hover:bg-sky-700 focus:ring-sky-300'
-                : 'bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-300'
-            }`}
+            className="w-full py-3 px-5 text-xs sm:text-sm font-bold text-white bg-[#645e45] hover:bg-[#4c472f] focus:ring-2 focus:ring-[#645e45]/30 rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             {isSubmitting ? (
               <span>Onboarding {roleLabel}...</span>

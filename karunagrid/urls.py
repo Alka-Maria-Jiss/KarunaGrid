@@ -18,15 +18,28 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
+
+def root_view(request):
+    return JsonResponse({
+        "project": "KarunaGrid Care Network API",
+        "status": "online",
+        "frontend_url": "http://localhost:5173/",
+        "admin_panel": "http://localhost:8000/admin/",
+        "api_root": "http://localhost:8000/api/"
+    })
 
 urlpatterns = [
+    path('', root_view, name='root'),
     path('admin/', admin.site.urls),
     path('api/', include('accounts.urls')),
     path('api/auth/', include('accounts.urls')),
     path('api/accounts/', include('accounts.urls')),
     path('api/notifications/', include('notifications.urls')),
+    path('api/telemedicine/', include('care_coordination.urls')),
 ]
 
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+
 

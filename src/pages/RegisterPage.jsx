@@ -234,9 +234,11 @@ export default function RegisterPage({ onNavigate }) {
       const res = await apiClient.post('/auth/register/', formData);
       setIsSuccess(true);
       setBannerType('success');
-      setBannerMessage(
-        res.message || 'Account created successfully! Your registration is pending administrator approval.'
-      );
+      const defaultSuccessMessage =
+        selectedRole === 'patient'
+          ? 'Your registration is pending doctor approval. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.'
+          : 'Your registration is pending administrator verification. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.';
+      setBannerMessage(res.message || defaultSuccessMessage);
       showSuccess('Registration submitted successfully!');
     } catch (err) {
       if (err.status === 400 && err.data?.errors) {
@@ -348,8 +350,10 @@ export default function RegisterPage({ onNavigate }) {
             <div className="text-center space-y-4 py-6">
               <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
               <h2 className="text-xl font-extrabold text-serene-text">Registration Submitted!</h2>
-              <p className="text-xs sm:text-sm text-serene-muted max-w-md mx-auto leading-relaxed">
-                Your account registration is currently pending administrator approval. You will receive an in-app notification as soon as your profile is reviewed.
+              <p className="text-xs sm:text-sm text-serene-muted max-w-md mx-auto leading-relaxed font-medium">
+                {selectedRole === 'patient'
+                  ? 'Your registration is pending doctor approval. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.'
+                  : 'Your registration is pending administrator verification. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.'}
               </p>
               <button
                 type="button"
