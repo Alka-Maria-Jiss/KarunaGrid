@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import CheckApplicationStatusPage from './pages/CheckApplicationStatusPage';
 import PatientDashboard from './pages/PatientDashboard';
 import CaregiverDashboard from './pages/CaregiverDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
@@ -49,6 +50,10 @@ function App() {
 
     if (currentPath === '/register') {
       return <RegisterPage onNavigate={navigateTo} />;
+    }
+
+    if (currentPath === '/check-application-status' || currentPath === '/application-status') {
+      return <CheckApplicationStatusPage onNavigate={navigateTo} />;
     }
 
     if (currentPath === '/dashboard/patient') {

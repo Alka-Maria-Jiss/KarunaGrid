@@ -11,12 +11,9 @@ export default function OnboardStaffForm({ role = 'doctor', onSuccess }) {
 
   // Form State
   const [name, setName] = useState('');
-  const [specialization, setSpecialization] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [phone, setPhone] = useState('');
-  const [serviceArea, setServiceArea] = useState('');
 
   // Status & Error States
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,11 +22,8 @@ export default function OnboardStaffForm({ role = 'doctor', onSuccess }) {
 
   const resetForm = () => {
     setName('');
-    setSpecialization('');
     setEmail('');
     setPassword('');
-    setPhone('');
-    setServiceArea('');
     setFieldErrors({});
     setShowPassword(false);
   };
@@ -44,9 +38,6 @@ export default function OnboardStaffForm({ role = 'doctor', onSuccess }) {
       name: name.trim(),
       email: email.trim(),
       password,
-      phone: phone.trim(),
-      service_area: serviceArea.trim(),
-      ...(isDoctor && { specialization: specialization.trim() }),
     };
 
     try {
@@ -92,9 +83,9 @@ export default function OnboardStaffForm({ role = 'doctor', onSuccess }) {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
           {/* FULL NAME */}
-          <div className="md:col-span-2">
+          <div>
             <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
               Full Name <span className="text-rose-500">*</span>
             </label>
@@ -115,136 +106,65 @@ export default function OnboardStaffForm({ role = 'doctor', onSuccess }) {
             )}
           </div>
 
-          {/* SPECIALIZATION (Doctor Only) */}
-          {isDoctor && (
-            <div className="md:col-span-2">
+          {/* EMAIL ID & INITIAL PASSWORD GRID */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* EMAIL ID */}
+            <div>
               <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-                Specialization <span className="text-rose-500">*</span>
+                Email Address <span className="text-rose-500">*</span>
               </label>
               <input
-                type="text"
+                type="email"
                 required
-                value={specialization}
-                onChange={(e) => setSpecialization(e.target.value)}
-                placeholder="e.g. Palliative Medicine, Oncology"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={isDoctor ? 'doctor@karunagrid.org' : 'nurse@karunagrid.org'}
                 className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
-                  fieldErrors.specialization
+                  fieldErrors.email
                     ? 'border-rose-400 focus:ring-rose-200'
                     : 'border-serene-outline-subtle focus:border-serene-primary focus:ring-serene-primary/20'
                 }`}
               />
-              {fieldErrors.specialization && (
-                <p className="text-rose-600 text-xs mt-1 font-semibold">
-                  {fieldErrors.specialization[0]}
-                </p>
+              {fieldErrors.email && (
+                <p className="text-rose-600 text-xs mt-1 font-semibold">{fieldErrors.email[0]}</p>
               )}
             </div>
-          )}
 
-          {/* EMAIL ID */}
-          <div>
-            <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-              Email Address <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={isDoctor ? 'doctor@karunagrid.org' : 'nurse@karunagrid.org'}
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
-                fieldErrors.email
-                  ? 'border-rose-400 focus:ring-rose-200'
-                  : 'border-serene-outline-subtle focus:border-serene-primary focus:ring-serene-primary/20'
-              }`}
-            />
-            {fieldErrors.email && (
-              <p className="text-rose-600 text-xs mt-1 font-semibold">{fieldErrors.email[0]}</p>
-            )}
-          </div>
-
-          {/* PASSWORD */}
-          <div>
-            <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-              Initial Password <span className="text-rose-500">*</span>
-            </label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className={`w-full px-3.5 py-2.5 pr-10 rounded-xl border text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
-                  fieldErrors.password
-                    ? 'border-rose-400 focus:ring-rose-200'
-                    : 'border-serene-outline-subtle focus:border-serene-primary focus:ring-serene-primary/20'
-                }`}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-serene-muted hover:text-serene-text p-1"
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-            {fieldErrors.password && (
-              <div className="text-rose-600 text-xs mt-1 font-semibold space-y-0.5">
-                {fieldErrors.password.map((err, idx) => (
-                  <p key={idx}>{err}</p>
-                ))}
+            {/* PASSWORD */}
+            <div>
+              <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
+                Initial Password <span className="text-rose-500">*</span>
+              </label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className={`w-full px-3.5 py-2.5 pr-10 rounded-xl border text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
+                    fieldErrors.password
+                      ? 'border-rose-400 focus:ring-rose-200'
+                      : 'border-serene-outline-subtle focus:border-serene-primary focus:ring-serene-primary/20'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-serene-muted hover:text-serene-text p-1"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-            )}
-          </div>
-
-          {/* PHONE NUMBER */}
-          <div>
-            <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-              Phone Number <span className="text-rose-500">*</span>{' '}
-              <span className="font-normal text-serene-muted lowercase">(10 digits)</span>
-            </label>
-            <input
-              type="tel"
-              required
-              maxLength={10}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-              placeholder="9876543210"
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
-                fieldErrors.phone
-                  ? 'border-rose-400 focus:ring-rose-200'
-                  : 'border-serene-outline-subtle focus:border-serene-primary focus:ring-serene-primary/20'
-              }`}
-            />
-            {fieldErrors.phone && (
-              <p className="text-rose-600 text-xs mt-1 font-semibold">{fieldErrors.phone[0]}</p>
-            )}
-          </div>
-
-          {/* SERVICE AREA */}
-          <div>
-            <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-              Service Area / Region <span className="text-rose-500">*</span>
-            </label>
-            <input
-              type="text"
-              required
-              value={serviceArea}
-              onChange={(e) => setServiceArea(e.target.value)}
-              placeholder="e.g. Ernakulam Central District"
-              className={`w-full px-3.5 py-2.5 rounded-xl border text-xs sm:text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
-                fieldErrors.service_area
-                  ? 'border-rose-400 focus:ring-rose-200'
-                  : 'border-serene-outline-subtle focus:border-serene-primary focus:ring-serene-primary/20'
-              }`}
-            />
-            {fieldErrors.service_area && (
-              <p className="text-rose-600 text-xs mt-1 font-semibold">
-                {fieldErrors.service_area[0]}
-              </p>
-            )}
+              {fieldErrors.password && (
+                <div className="text-rose-600 text-xs mt-1 font-semibold space-y-0.5">
+                  {fieldErrors.password.map((err, idx) => (
+                    <p key={idx}>{err}</p>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

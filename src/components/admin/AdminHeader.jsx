@@ -4,6 +4,7 @@ import NotificationDropdown from '../NotificationDropdown';
 
 const viewTitles = {
   dashboard: 'Administrator Dashboard',
+  profile: 'Administrator Profile',
   doctors: 'Doctor Management',
   nurses: 'Nurse Management',
   caregivers: 'Caregiver Directory',
@@ -25,6 +26,7 @@ export default function AdminHeader({
   currentView = 'dashboard',
   onOpenMobile,
   onLogout,
+  onNavigateView,
   pendingAlertCount = 0,
 }) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -58,17 +60,9 @@ export default function AdminHeader({
         </button>
 
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="font-extrabold text-base sm:text-lg lg:text-xl text-[#1e1b14] tracking-tight truncate">
-              {title}
-            </h1>
-            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-extrabold uppercase bg-[#f4ede0] text-[#645e45] rounded-full border border-[#e0d9cc]">
-              Phase 1
-            </span>
-          </div>
-          <p className="text-[11px] text-[#7b776c] font-medium hidden md:block">
-            KarunaGrid Community Palliative Care Network
-          </p>
+          <h1 className="font-extrabold text-base sm:text-lg lg:text-xl text-[#1e1b14] tracking-tight truncate">
+            {title}
+          </h1>
         </div>
       </div>
 
@@ -103,8 +97,8 @@ export default function AdminHeader({
 
           {/* Profile Menu Dropdown */}
           {showProfileMenu && (
-            <div className="absolute right-0 mt-2 w-56 bg-white rounded-2xl shadow-xl border border-[#e9e2d5] py-2 z-50 animate-in fade-in-50 zoom-in-95 duration-100">
-              <div className="px-4 py-2 border-b border-[#f0eae0]">
+            <div className="absolute right-0 mt-2 w-60 bg-white rounded-2xl shadow-xl border border-[#e9e2d5] py-2 z-50 animate-in fade-in-50 zoom-in-95 duration-100">
+              <div className="px-4 py-2.5 border-b border-[#f0eae0]">
                 <p className="text-xs font-extrabold text-[#1e1b14]">{adminName}</p>
                 <p className="text-[11px] text-[#7b776c] font-medium truncate">{user?.email || 'admin@karunagrid.org'}</p>
                 <span className="inline-block mt-1 px-2 py-0.5 text-[9px] font-extrabold uppercase bg-purple-100 text-purple-900 rounded-full border border-purple-200">
@@ -113,9 +107,17 @@ export default function AdminHeader({
               </div>
 
               <div className="py-1 text-xs font-semibold text-[#4a473d]">
-                <div className="px-4 py-2 text-[11px] text-[#7b776c]">
-                  Role: <strong className="text-[#1e1b14]">Administrator</strong>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowProfileMenu(false);
+                    if (onNavigateView) onNavigateView('profile');
+                  }}
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#1e1b14] hover:bg-[#f4ede0] transition-colors cursor-pointer text-left"
+                >
+                  <User className="w-4 h-4 text-[#645e45]" />
+                  <span>View Profile</span>
+                </button>
               </div>
 
               <div className="border-t border-[#f0eae0] pt-1">
@@ -125,10 +127,10 @@ export default function AdminHeader({
                     setShowProfileMenu(false);
                     onLogout();
                   }}
-                  className="w-full flex items-center gap-2 px-4 py-2 text-xs font-bold text-[#ba1a1a] hover:bg-[#fdf2f2] transition-colors cursor-pointer text-left"
+                  className="w-full flex items-center gap-2.5 px-4 py-2 text-xs font-bold text-[#ba1a1a] hover:bg-[#fdf2f2] transition-colors cursor-pointer text-left"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Sign Out</span>
+                  <span>Logout</span>
                 </button>
               </div>
             </div>

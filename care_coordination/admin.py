@@ -40,16 +40,16 @@ class TelemedicineFollowUpAdmin(admin.ModelAdmin):
 
 @admin.register(HomeVisitSchedule)
 class HomeVisitScheduleAdmin(admin.ModelAdmin):
-    list_display = ('schedule_id', 'patient', 'doctor', 'frequency', 'start_date', 'status', 'updated_at')
+    list_display = ('schedule_id', 'patient', 'nurse', 'frequency', 'start_date', 'status', 'updated_at')
     list_filter = ('frequency', 'status')
-    search_fields = ('patient__name', 'doctor__name')
+    search_fields = ('patient__name', 'nurse__name')
 
 
 @admin.register(HomeVisitOccurrence)
 class HomeVisitOccurrenceAdmin(admin.ModelAdmin):
-    list_display = ('occurrence_id', 'schedule', 'patient', 'scheduled_date', 'visit_type', 'urgency_level', 'status', 'allocated_nurse')
+    list_display = ('occurrence_id', 'schedule', 'patient', 'scheduled_date', 'visit_type', 'urgency_level', 'status', 'allocated_nurse', 'visiting_doctor')
     list_filter = ('visit_type', 'urgency_level', 'status')
-    search_fields = ('patient__name', 'allocated_nurse__name')
+    search_fields = ('patient__name', 'allocated_nurse__name', 'visiting_doctor__name')
 
 
 @admin.register(HomeVisitSummary)

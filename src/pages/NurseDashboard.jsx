@@ -1,55 +1,330 @@
-import React from 'react';
-import DashboardLayout from '../components/DashboardLayout';
-import { Activity, Phone, MapPin, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import NurseSidebar from '../components/nurse/NurseSidebar';
+import NurseHeader from '../components/nurse/NurseHeader';
+import NurseSummaryCards from '../components/nurse/NurseSummaryCards';
+import NurseTodaySchedule from '../components/nurse/NurseTodaySchedule';
+import NurseAdditionalVisitRequests from '../components/nurse/NurseAdditionalVisitRequests';
+import NurseQuickActions from '../components/nurse/NurseQuickActions';
+import NurseAllocatedVisits from '../components/nurse/NurseAllocatedVisits';
+import NurseAlerts from '../components/nurse/NurseAlerts';
+import NurseRecentActivity from '../components/nurse/NurseRecentActivity';
+
+// Dedicated Sub-Views
+import NurseHomeVisits from '../components/nurse/NurseHomeVisits';
+import NurseVisitCalendar from '../components/nurse/NurseVisitCalendar';
+import NurseVisitAllocations from '../components/nurse/NurseVisitAllocations';
+import NurseCaregiverAssignments from '../components/nurse/NurseCaregiverAssignments';
+import NursePatients from '../components/nurse/NursePatients';
+import NursePatientMedicalRecords from '../components/nurse/NursePatientMedicalRecords';
+import NursePatientTimeline from '../components/nurse/NursePatientTimeline';
+import NurseLaboratoryReports from '../components/nurse/NurseLaboratoryReports';
+import NurseNotifications from '../components/nurse/NurseNotifications';
+import NurseProfileView from '../components/nurse/NurseProfileView';
+
+// Modals
+import NurseReviewRequestModal from '../components/nurse/NurseReviewRequestModal';
+import NurseCompleteVisitModal from '../components/nurse/NurseCompleteVisitModal';
+import NurseVisitSummaryModal from '../components/nurse/NurseVisitSummaryModal';
 
 export default function NurseDashboard({ user, onLogout }) {
-  const details = user?.details || {};
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState(user);
+  const [dashboardData, setDashboardData] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isTogglingAvailability, setIsTogglingAvailability] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Selected Patient for Medical Records / Timeline routing
+  const [selectedPatientId, setSelectedPatientId] = useState(null);
+
+  // Modals state
+  const [reviewRequest, setReviewRequest] = useState(null);
+  const [completeVisit, setCompleteVisit] = useState(null);
+  const [summaryVisit, setSummaryVisit] = useState(null);
+
+  const fetchDashboardData = async () => {
+    setIsLoading(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch('http://127.0.0.1:8000/api/nurse/dashboard/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardData(data);
+      }
+    } catch (err) {
+      console.error('Error fetching nurse dashboard summary:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const handleToggleAvailability = async () => {
+    setIsTogglingAvailability(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch('http://127.0.0.1:8000/api/nurse/availability/', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setDashboardData((prev) => prev ? {
+          ...prev,
+          nurse_info: {
+            ...prev.nurse_info,
+            is_available_now: data.is_available_now,
+          }
+        } : prev);
+      }
+    } catch (err) {
+      console.error('Error toggling availability:', err);
+    } finally {
+      setIsTogglingAvailability(false);
+    }
+  };
+
+  const handleQuickAction = (targetTab, actionId) => {
+    setActiveTab(targetTab);
+  };
+
+  const handleViewMedicalProfile = (patientId) => {
+    setSelectedPatientId(patientId);
+    setActiveTab('patient_records');
+  };
+
+  const handleViewTimeline = (patientId) => {
+    setSelectedPatientId(patientId);
+    setActiveTab('patient_timeline');
+  };
+
+  const handleOpenCompleteModalFromSchedule = (visit) => {
+    setCompleteVisit(visit);
+  };
+
+  const handleOpenSummaryModal = (visit) => {
+    setSummaryVisit(visit);
+  };
+
+  const nurseInfo = dashboardData?.nurse_info || user?.details || {
+    name: user?.name || 'Nurse',
+    nurse_id: user?.details?.nurse_id || '---',
+    is_available_now: true,
+  };
+
+  const unreadCount = dashboardData?.summary_cards?.unread_notifications || 0;
 
   return (
-    <DashboardLayout user={user} onLogout={onLogout}>
-      <div className="space-y-6">
-        
-        {/* WELCOME BANNER */}
-        <div className="p-5 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-start gap-4 shadow-sm">
-          <Activity className="w-6 h-6 text-indigo-600 shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-extrabold text-base text-indigo-950">Nurse Care Portal</h3>
-            <p className="text-xs sm:text-sm text-indigo-900 mt-1 font-medium leading-relaxed">
-              Welcome, Nurse {user?.name || user?.email}! Your active care network profile is verified. You can review assigned home visit schedules, palliative care logs, and patient visit requests.
-            </p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#fff9ef] flex text-[#1e1b14] font-sans antialiased">
+      {/* Sidebar */}
+      <NurseSidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        unreadCount={unreadCount}
+        isMobileOpen={isMobileMenuOpen}
+        setIsMobileOpen={setIsMobileMenuOpen}
+      />
 
-        {/* PROFILE CARD */}
-        <div className="bg-white rounded-2xl border border-serene-outline-subtle p-6 space-y-4 shadow-sm">
-          <div className="flex items-center justify-between border-b border-serene-outline-subtle pb-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-indigo-50 text-indigo-700 rounded-xl">
-                <Activity className="w-6 h-6" />
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <NurseHeader
+          nurse={dashboardData?.nurse_info || nurseInfo}
+          unreadCount={unreadCount}
+          onToggleAvailability={handleToggleAvailability}
+          isTogglingAvailability={isTogglingAvailability}
+          onLogout={onLogout}
+          onOpenNotifications={() => setActiveTab('notifications')}
+          onOpenMobileMenu={() => setIsMobileMenuOpen(true)}
+          onNavigate={(tab) => setActiveTab(tab)}
+        />
+
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {/* DASHBOARD TAB */}
+          {activeTab === 'dashboard' && (
+            <div className="space-y-6">
+              {/* EXACT FIVE SUMMARY CARDS */}
+              <NurseSummaryCards
+                metrics={dashboardData?.summary_cards || {}}
+                isLoading={isLoading}
+                onNavigateTab={(tab) => setActiveTab(tab)}
+              />
+
+              {/* ROW 1: TODAY'S SCHEDULE & ADDITIONAL VISIT REQUESTS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <NurseTodaySchedule
+                  schedule={dashboardData?.today_schedule || []}
+                  isLoading={isLoading}
+                  onOpenCompleteModal={handleOpenCompleteModalFromSchedule}
+                  onOpenSelfAllocateModal={(v) => {
+                    setActiveTab('visit_allocations');
+                  }}
+                  onViewAll={() => setActiveTab('home_visits')}
+                />
+
+                <NurseAdditionalVisitRequests
+                  requests={dashboardData?.additional_requests || []}
+                  isLoading={isLoading}
+                  onReviewRequest={(req) => setReviewRequest(req)}
+                  onViewAll={() => setActiveTab('additional_requests')}
+                />
               </div>
-              <div>
-                <h2 className="text-xl font-extrabold text-serene-text">{user?.name || 'Nurse'}</h2>
-                <p className="text-xs text-serene-muted font-semibold">{user?.email}</p>
+
+              {/* ROW 2: QUICK ACTIONS & MY ALLOCATED VISITS */}
+              <div className="space-y-6">
+                <NurseQuickActions
+                  onActionClick={handleQuickAction}
+                />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <NurseAllocatedVisits
+                    visits={dashboardData?.upcoming_allocated_visits || []}
+                    isLoading={isLoading}
+                    onOpenCompleteModal={(v) => setCompleteVisit(v)}
+                    onViewAll={() => setActiveTab('home_visits')}
+                  />
+
+                  <NurseAlerts
+                    alerts={dashboardData?.alerts_and_reminders || []}
+                    isLoading={isLoading}
+                    onNavigateTab={(tab) => setActiveTab(tab)}
+                  />
+                </div>
               </div>
-            </div>
-            <span className="px-3 py-1 text-xs font-extrabold rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-              APPROVED & ACTIVE
-            </span>
-          </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-serene-text">
-            <div>
-              <p><strong className="text-serene-muted">Phone:</strong> {details.phone || 'N/A'}</p>
-              <p><strong className="text-serene-muted">Panchayath:</strong> {details.panchayath || 'N/A'}</p>
+              {/* ROW 3: RECENT ACTIVITY */}
+              <NurseRecentActivity
+                activity={dashboardData?.recent_activity || []}
+                isLoading={isLoading}
+              />
             </div>
-            <div>
-              <p><strong className="text-serene-muted">Pincode:</strong> {details.pincode || 'N/A'}</p>
-              <p><strong className="text-serene-muted">Nurse ID:</strong> #{details.nurse_id}</p>
-            </div>
-          </div>
-        </div>
+          )}
 
+          {/* HOME VISIT MANAGEMENT TAB */}
+          {activeTab === 'home_visits' && (
+            <NurseHomeVisits
+              onOpenCompleteModal={(v) => setCompleteVisit(v)}
+              onOpenSummaryModal={(v) => setSummaryVisit(v)}
+              onNavigateTab={(tab) => setActiveTab(tab)}
+            />
+          )}
+
+          {/* VISIT CALENDAR TAB */}
+          {activeTab === 'visit_calendar' && (
+            <NurseVisitCalendar
+              onOpenCompleteModal={(v) => setCompleteVisit(v)}
+            />
+          )}
+
+          {/* VISIT ALLOCATIONS TAB */}
+          {activeTab === 'visit_allocations' && (
+            <NurseVisitAllocations
+              onAllocated={() => fetchDashboardData()}
+            />
+          )}
+
+          {/* ADDITIONAL VISIT REQUESTS TAB */}
+          {activeTab === 'additional_requests' && (
+            <div className="space-y-6">
+              <NurseAdditionalVisitRequests
+                requests={dashboardData?.additional_requests || []}
+                isLoading={isLoading}
+                onReviewRequest={(req) => setReviewRequest(req)}
+                onViewAll={() => {}}
+              />
+            </div>
+          )}
+
+          {/* MY PATIENTS TAB */}
+          {activeTab === 'patients' && (
+            <NursePatients
+              onViewMedicalProfile={handleViewMedicalProfile}
+              onViewTimeline={handleViewTimeline}
+              onViewHomeVisits={() => setActiveTab('home_visits')}
+            />
+          )}
+
+          {/* PATIENT MEDICAL RECORDS TAB */}
+          {activeTab === 'patient_records' && (
+            <NursePatientMedicalRecords
+              initialPatientId={selectedPatientId}
+              onBack={() => setActiveTab('patients')}
+            />
+          )}
+
+          {/* PATIENT TIMELINE TAB */}
+          {activeTab === 'patient_timeline' && (
+            <NursePatientTimeline
+              initialPatientId={selectedPatientId}
+            />
+          )}
+
+          {/* CAREGIVER ASSIGNMENTS TAB */}
+          {activeTab === 'caregivers' && (
+            <NurseCaregiverAssignments />
+          )}
+
+          {/* LABORATORY REPORTS TAB */}
+          {activeTab === 'lab_reports' && (
+            <NurseLaboratoryReports />
+          )}
+
+          {/* NOTIFICATIONS TAB */}
+          {activeTab === 'notifications' && (
+            <NurseNotifications
+              onNotificationRead={() => fetchDashboardData()}
+            />
+          )}
+
+          {/* PROFILE VIEW TAB */}
+          {activeTab === 'profile' && (
+            <NurseProfileView
+              user={currentUser || user}
+              onUpdateUser={(updated) => {
+                setCurrentUser(updated);
+                fetchDashboardData();
+              }}
+              onRefresh={fetchDashboardData}
+            />
+          )}
+        </main>
       </div>
-    </DashboardLayout>
+
+      {/* MODALS */}
+      {reviewRequest && (
+        <NurseReviewRequestModal
+          request={reviewRequest}
+          onClose={() => setReviewRequest(null)}
+          onApproved={() => fetchDashboardData()}
+          onRescheduled={() => fetchDashboardData()}
+        />
+      )}
+
+      {completeVisit && (
+        <NurseCompleteVisitModal
+          visit={completeVisit}
+          onClose={() => setCompleteVisit(null)}
+          onCompleted={() => fetchDashboardData()}
+        />
+      )}
+
+      {summaryVisit && (
+        <NurseVisitSummaryModal
+          visit={summaryVisit}
+          onClose={() => setSummaryVisit(null)}
+          onUploaded={() => fetchDashboardData()}
+        />
+      )}
+    </div>
   );
 }

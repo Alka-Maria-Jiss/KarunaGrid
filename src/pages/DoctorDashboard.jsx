@@ -1,370 +1,440 @@
 import React, { useState, useEffect } from 'react';
-import DashboardLayout from '../components/DashboardLayout';
-import { Stethoscope, UserCheck, FileText, CheckCircle2, XCircle, AlertCircle, Eye, RefreshCw, Phone, MapPin, Video } from 'lucide-react';
-import apiClient from '../api/apiClient';
-import { useToast } from '../context/ToastContext';
-import TelemedicineDoctorSection from '../components/TelemedicineDoctorSection';
+import DoctorSidebar from '../components/doctor/DoctorSidebar';
+import DoctorHeader from '../components/doctor/DoctorHeader';
+import DoctorSummaryCards from '../components/doctor/DoctorSummaryCards';
+import DoctorSchedule from '../components/doctor/DoctorSchedule';
+import PendingRegistrations from '../components/doctor/PendingRegistrations';
+import DoctorQuickActions from '../components/doctor/DoctorQuickActions';
+import UpcomingHomeVisits from '../components/doctor/UpcomingHomeVisits';
+import DoctorAlerts from '../components/doctor/DoctorAlerts';
+import RecentPatientActivity from '../components/doctor/RecentPatientActivity';
+import DoctorRegistrationDetailModal from '../components/doctor/DoctorRegistrationDetailModal';
+
+// Dedicated Sub-views & Patient Workspace
+import DoctorPatientWorkspace from '../components/doctor/DoctorPatientWorkspace';
+import DoctorPatients from '../components/doctor/DoctorPatients';
+import DoctorRegistrationReview from '../components/doctor/DoctorRegistrationReview';
+import DoctorTelemedicine from '../components/doctor/DoctorTelemedicine';
+import DoctorHomeVisits from '../components/doctor/DoctorHomeVisits';
+import DoctorScheduleChanges from '../components/doctor/DoctorScheduleChanges';
+import DoctorEquipmentRequests from '../components/doctor/DoctorEquipmentRequests';
+import DoctorReports from '../components/doctor/DoctorReports';
+import DoctorNotifications from '../components/doctor/DoctorNotifications';
+import DoctorProfileView from '../components/doctor/DoctorProfileView';
+
+import { RefreshCw } from 'lucide-react';
 
 export default function DoctorDashboard({ user, onLogout }) {
-  const [activeTab, setActiveTab] = useState('approvals');
-  const [pendingPatients, setPendingPatients] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [currentView, setCurrentView] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState(user);
+  const [selectedPatientId, setSelectedPatientId] = useState(null);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState('profile');
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [doctorData, setDoctorData] = useState(null);
+  const [isTogglingAvailability, setIsTogglingAvailability] = useState(false);
+  const [reviewModalPatient, setReviewModalPatient] = useState(null);
+  const [isProcessingApproval, setIsProcessingApproval] = useState(false);
 
-  // Rejection modal state
-  const [rejectingPatient, setRejectingPatient] = useState(null);
-  const [rejectionReason, setRejectionReason] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const { showSuccess, showError } = useToast();
-
-  const fetchPendingPatients = async () => {
+  // 1. Authenticated Doctor verification & Dashboard data load
+  const fetchDashboardData = async () => {
     try {
-      setIsLoading(true);
-      const data = await apiClient.get('/doctor/patients/pending/');
-      setPendingPatients(data || []);
+      const token = localStorage.getItem('access_token');
+
+      if (!token) {
+        if (onLogout) onLogout();
+        else window.location.href = '/login';
+        return;
+      }
+
+      const res = await fetch('http://127.0.0.1:8000/api/doctor/dashboard/', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setDoctorData(data);
+      } else if (res.status === 401 || res.status === 403) {
+        if (onLogout) onLogout();
+        else window.location.href = '/login';
+      }
     } catch (err) {
-      console.error("Failed to load pending patients:", err);
-      showError(err.message || "Failed to load pending patient registrations.");
+      console.error('Error loading doctor dashboard data:', err);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchPendingPatients();
+    fetchDashboardData();
   }, []);
 
-  const handleApprove = async (patient) => {
-    try {
-      setIsSubmitting(true);
-      const res = await apiClient.post(`/doctor/patients/${patient.patient_id}/approve/`);
-      showSuccess(res.message || `Patient ${patient.name} approved successfully.`);
-      setPendingPatients((prev) => prev.filter((p) => p.patient_id !== patient.patient_id));
-      if (selectedPatient?.patient_id === patient.patient_id) setSelectedPatient(null);
-    } catch (err) {
-      console.error("Failed to approve patient:", err);
-      showError(err.message || "Failed to approve patient.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleRejectSubmit = async (e) => {
-    e.preventDefault();
-    if (!rejectionReason.trim()) {
-      showError("Please enter a rejection reason.");
-      return;
-    }
-
-    try {
-      setIsSubmitting(true);
-      const res = await apiClient.post(`/doctor/patients/${rejectingPatient.patient_id}/reject/`, {
-        rejection_reason: rejectionReason.trim(),
-      });
-      showSuccess(res.message || `Patient ${rejectingPatient.name} registration rejected.`);
-      setPendingPatients((prev) => prev.filter((p) => p.patient_id !== rejectingPatient.patient_id));
-      setRejectingPatient(null);
-      setRejectionReason('');
-      if (selectedPatient?.patient_id === rejectingPatient.patient_id) setSelectedPatient(null);
-    } catch (err) {
-      console.error("Failed to reject patient:", err);
-      showError(err.message || "Failed to reject patient.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleOpenDocument = async (docUrl) => {
-    if (!docUrl) return;
+  // 2. Toggle Doctor Availability
+  const handleToggleAvailability = async (newStatus) => {
+    setIsTogglingAvailability(true);
     try {
       const token = localStorage.getItem('access_token');
-      let fullUrl = docUrl.startsWith('http')
-        ? docUrl
-        : `http://127.0.0.1:8000${docUrl.startsWith('/') ? '' : '/'}${docUrl}`;
-
-      if (token && !fullUrl.includes('token=')) {
-        fullUrl += `${fullUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
-      }
-
-      const res = await fetch(fullUrl, {
+      const res = await fetch('http://127.0.0.1:8000/api/doctor/availability/', {
+        method: 'POST',
         headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({ is_available_now: newStatus }),
       });
 
-      if (!res.ok) {
-        let errorMsg = 'Could not access document.';
-        try {
-          const errData = await res.json();
-          errorMsg = errData.detail || errorMsg;
-        } catch (_) {}
-        showError(errorMsg);
-        return;
+      if (res.ok) {
+        const data = await res.json();
+        setDoctorData((prev) => ({
+          ...prev,
+          doctor_info: {
+            ...prev?.doctor_info,
+            is_available_now: data.is_available_now,
+          },
+        }));
       }
-
-      const blob = await res.blob();
-      const blobUrl = URL.createObjectURL(blob);
-      window.open(blobUrl, '_blank');
     } catch (err) {
-      console.error("Failed to open document:", err);
-      showError("Could not open document. Please check server connection.");
+      console.error('Error toggling availability:', err);
+    } finally {
+      setIsTogglingAvailability(false);
     }
   };
 
+  // 3. Approve Registration Modal Actions
+  const handleModalApprove = async (patientId) => {
+    setIsProcessingApproval(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/approve/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (res.ok) {
+        setReviewModalPatient(null);
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Error approving registration:', err);
+    } finally {
+      setIsProcessingApproval(false);
+    }
+  };
+
+  const handleModalReject = async (patientId, reason) => {
+    setIsProcessingApproval(true);
+    try {
+      const token = localStorage.getItem('access_token');
+      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/reject/`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ rejection_reason: reason }),
+      });
+      if (res.ok) {
+        setReviewModalPatient(null);
+        fetchDashboardData();
+      }
+    } catch (err) {
+      console.error('Error rejecting registration:', err);
+    } finally {
+      setIsProcessingApproval(false);
+    }
+  };
+
+  // 4. Logout
+  const handleLogout = () => {
+    if (onLogout) {
+      onLogout();
+    } else {
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user');
+      window.location.href = '/login';
+    }
+  };
+
+  // Sidebar navigation switcher
+  const handleSelectView = (view) => {
+    setCurrentView(view);
+    if (view === 'prescriptions') {
+      setActiveWorkspaceTab('prescriptions');
+    } else if (view === 'lab_reports') {
+      setActiveWorkspaceTab('lab_reports');
+    } else if (view === 'nutrition') {
+      setActiveWorkspaceTab('nutrition');
+    } else if (view === 'medical_profiles') {
+      setActiveWorkspaceTab('profile');
+    } else if (view === 'timeline') {
+      setActiveWorkspaceTab('timeline');
+    } else if (view === 'patients') {
+      setActiveWorkspaceTab('profile');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleOpenWorkspaceForPatient = (patientId, tab = 'profile') => {
+    setSelectedPatientId(patientId);
+    setActiveWorkspaceTab(tab);
+    setCurrentView('patients');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#fff9ef] flex flex-col items-center justify-center text-[#645e45] space-y-3">
+        <RefreshCw className="w-8 h-8 animate-spin" />
+        <p className="font-extrabold text-sm tracking-tight text-[#1e1b14]">
+          Loading KarunaGrid Doctor Portal...
+        </p>
+      </div>
+    );
+  }
+
+  const doctorInfo = doctorData?.doctor_info || {};
+  const summary = doctorData?.summary_cards || {};
+  const todaySchedule = doctorData?.today_schedule || [];
+  const pendingRegistrations = doctorData?.pending_registrations || [];
+  const upcomingHomeVisits = doctorData?.upcoming_home_visits || [];
+  const alerts = doctorData?.alerts_and_reminders || [];
+  const recentActivity = doctorData?.recent_patient_activity || [];
+
   return (
-    <DashboardLayout user={user} onLogout={onLogout}>
-      <div className="space-y-6">
-        
-        {/* TOP TAB CONTROL */}
-        <div className="flex items-center justify-between border-b border-serene-outline-subtle pb-3">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => setActiveTab('telemedicine')}
-              className={`px-4 py-2 text-sm font-extrabold rounded-xl transition-all flex items-center gap-2 ${
-                activeTab === 'telemedicine'
-                  ? 'bg-serene-primary text-white shadow-sm'
-                  : 'bg-serene-container text-serene-muted hover:text-serene-text'
-              }`}
-            >
-              <Video className="w-4 h-4" />
-              <span>Telemedicine Portal</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('approvals')}
-              className={`px-4 py-2 text-sm font-extrabold rounded-xl transition-all flex items-center gap-2 ${
-                activeTab === 'approvals'
-                  ? 'bg-serene-primary text-white shadow-sm'
-                  : 'bg-serene-container text-serene-muted hover:text-serene-text'
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              <span>Pending Patient Approvals ({pendingPatients.length})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveTab('overview')}
-              className={`px-4 py-2 text-sm font-extrabold rounded-xl transition-all flex items-center gap-2 ${
-                activeTab === 'overview'
-                  ? 'bg-serene-primary text-white shadow-sm'
-                  : 'bg-serene-container text-serene-muted hover:text-serene-text'
-              }`}
-            >
-              <Stethoscope className="w-4 h-4" />
-              <span>Doctor Overview</span>
-            </button>
-          </div>
+    <div className="min-h-screen bg-[#fff9ef] flex">
+      {/* 240-260px DESKTOP SIDEBAR + MOBILE DRAWER */}
+      <DoctorSidebar
+        currentView={currentView}
+        onSelectView={handleSelectView}
+        onLogout={handleLogout}
+        isMobileOpen={isMobileOpen}
+        onCloseMobile={() => setIsMobileOpen(false)}
+        pendingCount={summary.pending_actions}
+      />
 
-          <button
-            type="button"
-            onClick={fetchPendingPatients}
-            className="p-2 rounded-xl text-serene-muted hover:text-serene-text hover:bg-serene-container transition-colors"
-            title="Refresh list"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+      {/* MAIN VIEWPORT */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
+        {/* HEADER */}
+        <DoctorHeader
+          doctorInfo={doctorInfo}
+          onOpenMobile={() => setIsMobileOpen(true)}
+          onLogout={handleLogout}
+          onNavigate={(view) => handleSelectView(view)}
+          onToggleAvailability={handleToggleAvailability}
+          isTogglingAvailability={isTogglingAvailability}
+          unreadCount={alerts.length}
+        />
 
-        {activeTab === 'telemedicine' ? (
-          <TelemedicineDoctorSection showSuccess={showSuccess} showError={showError} />
-        ) : activeTab === 'approvals' ? (
-          <div className="space-y-4">
-            <h3 className="text-base font-extrabold text-serene-text">
-              Patient Registration Requests Requiring Review
-            </h3>
-
-            {isLoading && pendingPatients.length === 0 ? (
-              <div className="p-8 text-center bg-white rounded-2xl border border-serene-outline-subtle text-xs text-serene-muted font-bold">
-                Loading pending registrations...
-              </div>
-            ) : pendingPatients.length === 0 ? (
-              <div className="p-10 text-center bg-white rounded-2xl border border-serene-outline-subtle space-y-2">
-                <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                <h4 className="font-extrabold text-base text-serene-text">All Patient Reviews Caught Up</h4>
-                <p className="text-xs text-serene-muted max-w-sm mx-auto">
-                  There are currently no pending patient registrations requiring doctor review.
-                </p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {pendingPatients.map((patient) => (
-                  <div
-                    key={patient.patient_id}
-                    className="bg-white rounded-2xl border border-serene-outline-subtle p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <h4 className="font-extrabold text-base text-serene-text">{patient.name}</h4>
-                          <p className="text-xs text-serene-muted font-semibold">Reg ID: {patient.registration_id}</p>
-                        </div>
-                        <span className="px-2.5 py-0.5 text-[11px] font-extrabold bg-amber-100 text-amber-900 border border-amber-300 rounded-full">
-                          Pending Review
-                        </span>
-                      </div>
-
-                      <div className="text-xs space-y-1 text-serene-text">
-                        <p><span className="font-semibold text-serene-muted">Email:</span> {patient.email}</p>
-                        <p><span className="font-semibold text-serene-muted">Phone:</span> {patient.phone}</p>
-                        <p><span className="font-semibold text-serene-muted">DOB:</span> {patient.dob} | <span className="font-semibold text-serene-muted">Gender:</span> {patient.gender}</p>
-                        <p><span className="font-semibold text-serene-muted">Location:</span> {patient.place}, {patient.panchayath} (Ward {patient.ward_no})</p>
-                      </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="pt-4 mt-4 border-t border-serene-outline-subtle/60 flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedPatient(patient)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-serene-primary bg-serene-container hover:bg-serene-primary hover:text-white rounded-xl transition-all"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>View Document</span>
-                      </button>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setRejectingPatient(patient)}
-                          disabled={isSubmitting}
-                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition-all"
-                        >
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span>Reject</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleApprove(patient)}
-                          disabled={isSubmitting}
-                          className="inline-flex items-center gap-1 px-3.5 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition-all shadow-sm"
-                        >
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Approve</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        ) : (
-          /* DOCTOR OVERVIEW TAB */
-          <div className="bg-white rounded-2xl border border-serene-outline-subtle p-6 space-y-4 shadow-sm">
-            <h3 className="text-lg font-extrabold text-serene-text">Doctor Profile & Network Overview</h3>
-            <p className="text-xs text-serene-muted">Welcome, Dr. {user?.name}. Your verified medical profile is active on KarunaGrid.</p>
-          </div>
-        )}
-
-        {/* DETAIL & DISCHARGE SUMMARY VIEW MODAL */}
-        {selectedPatient && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl border border-serene-outline-subtle">
-              <div className="flex items-center justify-between border-b border-serene-outline-subtle pb-3">
-                <h3 className="font-extrabold text-lg text-serene-text">Patient Registration Details</h3>
-                <button
-                  type="button"
-                  onClick={() => setSelectedPatient(null)}
-                  className="text-serene-muted hover:text-serene-text font-bold text-sm"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-3 text-xs text-serene-text">
-                <p><strong className="text-serene-muted">Full Name:</strong> {selectedPatient.name}</p>
-                <p><strong className="text-serene-muted">Registration ID:</strong> {selectedPatient.registration_id}</p>
-                <p><strong className="text-serene-muted">Email:</strong> {selectedPatient.email}</p>
-                <p><strong className="text-serene-muted">Phone:</strong> {selectedPatient.phone}</p>
-                <p><strong className="text-serene-muted">DOB:</strong> {selectedPatient.dob} ({selectedPatient.gender})</p>
-                <p><strong className="text-serene-muted">Address:</strong> {selectedPatient.house_name}, {selectedPatient.place}, {selectedPatient.panchayath}, Ward {selectedPatient.ward_no}, {selectedPatient.pincode}</p>
-                {selectedPatient.emergency_contact_name && (
-                  <p><strong className="text-serene-muted">Emergency Contact:</strong> {selectedPatient.emergency_contact_name} ({selectedPatient.emergency_contact_phone})</p>
-                )}
-
-                <div className="pt-3 border-t border-serene-outline-subtle">
-                  <h4 className="font-extrabold text-serene-text mb-2">Discharge Summary / Referral Document</h4>
-                  {selectedPatient.discharge_summary_url ? (
-                    <button
-                      type="button"
-                      onClick={() => handleOpenDocument(selectedPatient.discharge_summary_url)}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold text-white bg-serene-primary rounded-xl shadow-sm hover:bg-serene-primary-hover transition-all cursor-pointer"
-                    >
-                      <FileText className="w-4 h-4" />
-                      <span>Open Secure Medical Discharge Summary Document</span>
-                    </button>
-                  ) : (
-                    <p className="text-rose-600 font-bold">No document uploaded.</p>
-                  )}
-                </div>
-              </div>
-
-              <div className="pt-4 border-t border-serene-outline-subtle flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedPatient(null)}
-                  className="px-4 py-2 text-xs font-bold text-serene-muted hover:text-serene-text"
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* REJECTION REASON FORM MODAL */}
-        {rejectingPatient && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <form onSubmit={handleRejectSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl border border-serene-outline-subtle">
-              <div className="flex items-center justify-between border-b border-serene-outline-subtle pb-3">
-                <h3 className="font-extrabold text-base text-rose-950 flex items-center gap-2">
-                  <AlertCircle className="w-5 h-5 text-rose-600" />
-                  Reject Patient Registration
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setRejectingPatient(null)}
-                  className="text-serene-muted hover:text-serene-text font-bold text-sm"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <p className="text-xs text-serene-muted font-medium">
-                Rejecting registration for <strong>{rejectingPatient.name}</strong>. Please state the exact reason for rejection (this will be communicated in their in-app status notification):
-              </p>
-
-              <textarea
-                required
-                rows={3}
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="e.g. Discharge summary document is unreadable or missing required referral signature."
-                className="w-full p-3 text-xs border border-serene-outline-subtle rounded-xl bg-white focus:outline-none focus:ring-2 focus:ring-rose-400"
+        {/* MAIN BODY CONTENT */}
+        <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-7xl w-full mx-auto space-y-6">
+          {/* 1. MASTER DASHBOARD SUMMARY VIEW */}
+          {currentView === 'dashboard' && (
+            <div className="space-y-6">
+              {/* EXACTLY FIVE SUMMARY CARDS */}
+              <DoctorSummaryCards
+                summary={summary}
+                onNavigate={(view) => handleSelectView(view)}
               />
 
-              <div className="flex items-center justify-end gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setRejectingPatient(null)}
-                  className="px-4 py-2 text-xs font-bold text-serene-muted hover:text-serene-text"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="px-4 py-2 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition-all shadow-sm"
-                >
-                  Submit Rejection
-                </button>
+              {/* 2-COLUMN SECTION 1: TODAY'S SCHEDULE | PENDING PATIENT REGISTRATIONS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <DoctorSchedule
+                  schedule={todaySchedule}
+                  onNavigate={(view) => handleSelectView(view)}
+                />
+                <PendingRegistrations
+                  registrations={pendingRegistrations}
+                  onReview={(patient) => setReviewModalPatient(patient)}
+                  onNavigate={(view) => handleSelectView(view)}
+                />
               </div>
-            </form>
-          </div>
-        )}
 
+              {/* 2-COLUMN SECTION 2: CLINICAL QUICK ACTIONS | UPCOMING HOME VISITS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <DoctorQuickActions
+                  onNavigate={(view) => handleSelectView(view)}
+                />
+                <UpcomingHomeVisits
+                  visits={upcomingHomeVisits}
+                  onNavigate={(view) => handleSelectView(view)}
+                />
+              </div>
+
+              {/* 2-COLUMN SECTION 3: ALERTS & REMINDERS | RECENT PATIENT ACTIVITY */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <DoctorAlerts
+                  alerts={alerts}
+                  onNavigate={(view) => handleSelectView(view)}
+                />
+                <RecentPatientActivity
+                  activities={recentActivity}
+                  onNavigate={(view) => handleSelectView(view)}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* 2. DEDICATED PATIENT MANAGEMENT & CLINICAL WORKSPACE SUB-VIEWS */}
+          {currentView === 'patients' && (
+            selectedPatientId ? (
+              <DoctorPatientWorkspace
+                patientId={selectedPatientId}
+                initialTab={activeWorkspaceTab || 'profile'}
+                onBack={() => setSelectedPatientId(null)}
+              />
+            ) : (
+              <DoctorPatients
+                onSelectPatient={(pId, tab) => handleOpenWorkspaceForPatient(pId, tab || 'profile')}
+              />
+            )
+          )}
+
+          {currentView === 'medical_profiles' && (
+            selectedPatientId ? (
+              <DoctorPatientWorkspace
+                patientId={selectedPatientId}
+                initialTab="profile"
+                onBack={() => setSelectedPatientId(null)}
+              />
+            ) : (
+              <DoctorPatients
+                contextIntent="profile"
+                contextTitle="Select Patient for Medical Profile"
+                onSelectPatient={(pId) => handleOpenWorkspaceForPatient(pId, 'profile')}
+              />
+            )
+          )}
+
+          {currentView === 'timeline' && (
+            selectedPatientId ? (
+              <DoctorPatientWorkspace
+                patientId={selectedPatientId}
+                initialTab="timeline"
+                onBack={() => setSelectedPatientId(null)}
+              />
+            ) : (
+              <DoctorPatients
+                contextIntent="timeline"
+                contextTitle="Select Patient for Clinical Timeline"
+                onSelectPatient={(pId) => handleOpenWorkspaceForPatient(pId, 'timeline')}
+              />
+            )
+          )}
+
+          {currentView === 'prescriptions' && (
+            selectedPatientId ? (
+              <DoctorPatientWorkspace
+                patientId={selectedPatientId}
+                initialTab="prescriptions"
+                onBack={() => setSelectedPatientId(null)}
+              />
+            ) : (
+              <DoctorPatients
+                contextIntent="prescriptions"
+                contextTitle="Select Patient to Manage Prescriptions"
+                onSelectPatient={(pId) => handleOpenWorkspaceForPatient(pId, 'prescriptions')}
+              />
+            )
+          )}
+
+          {currentView === 'lab_reports' && (
+            selectedPatientId ? (
+              <DoctorPatientWorkspace
+                patientId={selectedPatientId}
+                initialTab="lab_reports"
+                onBack={() => setSelectedPatientId(null)}
+              />
+            ) : (
+              <DoctorPatients
+                contextIntent="lab_reports"
+                contextTitle="Select Patient for Laboratory Reports"
+                onSelectPatient={(pId) => handleOpenWorkspaceForPatient(pId, 'lab_reports')}
+              />
+            )
+          )}
+
+          {currentView === 'nutrition' && (
+            selectedPatientId ? (
+              <DoctorPatientWorkspace
+                patientId={selectedPatientId}
+                initialTab="nutrition"
+                onBack={() => setSelectedPatientId(null)}
+              />
+            ) : (
+              <DoctorPatients
+                contextIntent="nutrition"
+                contextTitle="Select Patient for Nutrition & Meal Plans"
+                onSelectPatient={(pId) => handleOpenWorkspaceForPatient(pId, 'nutrition')}
+              />
+            )
+          )}
+
+          {currentView === 'registration_review' && (
+            <DoctorRegistrationReview
+              onRefreshStats={fetchDashboardData}
+            />
+          )}
+
+          {/* OTHER DOCTOR MODULES (Preserved Exactly) */}
+          {currentView === 'telemedicine' && (
+            <DoctorTelemedicine />
+          )}
+
+          {currentView === 'home_visits' && (
+            <DoctorHomeVisits />
+          )}
+
+          {currentView === 'schedule_changes' && (
+            <DoctorScheduleChanges />
+          )}
+
+          {currentView === 'equipment_requests' && (
+            <DoctorEquipmentRequests />
+          )}
+
+          {currentView === 'reports' && (
+            <DoctorReports />
+          )}
+
+          {currentView === 'profile' && (
+            <DoctorProfileView
+              user={currentUser || user}
+              onUpdateUser={(updated) => {
+                setCurrentUser(updated);
+                fetchDashboardData();
+              }}
+              onRefresh={fetchDashboardData}
+            />
+          )}
+
+          {currentView === 'notifications' && (
+            <DoctorNotifications
+              onRefreshUnread={fetchDashboardData}
+            />
+          )}
+        </main>
+
+        {/* FOOTER */}
+        <footer className="mt-auto border-t border-[#e9e2d5] bg-[#fdfbf7] py-4 px-6 text-center text-xs text-[#7b776c] font-medium">
+          <p>© 2026 KarunaGrid Care Network. All rights reserved.</p>
+        </footer>
       </div>
-    </DashboardLayout>
+
+      {/* QUICK REGISTRATION REVIEW MODAL (From Dashboard Widget) */}
+      {reviewModalPatient && (
+        <DoctorRegistrationDetailModal
+          patient={reviewModalPatient}
+          onClose={() => setReviewModalPatient(null)}
+          onApprove={handleModalApprove}
+          onReject={handleModalReject}
+          isProcessing={isProcessingApproval}
+        />
+      )}
+    </div>
   );
 }

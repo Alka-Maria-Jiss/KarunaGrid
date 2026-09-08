@@ -1,8 +1,11 @@
 import mimetypes
+import re
 from datetime import datetime, timedelta, date
 from django.utils import timezone
 from django.http import FileResponse
 from django.core.files.storage import default_storage
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -16,7 +19,9 @@ from .models import (
     Role,
     RegistrationStatus,
     VerificationStatus,
+    PatientStatus,
     Patient,
+    PatientRegistrationApplication,
     Caregiver,
     Doctor,
     Nurse,
@@ -25,6 +30,7 @@ from .models import (
 from .serializers import (
     PatientRegisterSerializer,
     CaregiverRegisterSerializer,
+    PublicApplicationStatusSerializer,
     LoginSerializer,
     PendingPatientSerializer,
     PendingCaregiverSerializer,
@@ -54,12 +60,21 @@ class RegisterView(APIView):
         if not serializer.is_valid():
             return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer.save()
-        approval_type = "doctor approval" if role == 'patient' else "administrator verification"
-        return Response(
-            {"message": f"Your registration is pending {approval_type}. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided."},
-            status=status.HTTP_201_CREATED,
-        )
+        instance = serializer.save()
+        if role == 'patient':
+            return Response(
+                {
+                    "message": "Registration submitted successfully.",
+                    "application_id": instance.application_id,
+                    "registration_status": instance.registration_status,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        else:
+            return Response(
+                {"message": "Your registration is pending administrator verification. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided."},
+                status=status.HTTP_201_CREATED,
+            )
 
 
 class LoginView(APIView):
@@ -227,18 +242,26 @@ class SecureDocumentView(APIView):
         has_access = False
 
         if doc_type == 'patient_discharge_summary':
-            patient = Patient.objects.filter(patient_id=doc_id).first()
-            if not patient:
-                return Response({"detail": "Document not found."}, status=status.HTTP_404_NOT_FOUND)
+            # Check PatientRegistrationApplication first, then Patient
+            app = PatientRegistrationApplication.objects.filter(id=doc_id).first()
+            if app:
+                file_path = app.discharge_summary_path
+                # Check authorization: Doctor or Admin
+                if user.role in [Role.ADMIN, Role.DOCTOR]:
+                    has_access = True
+            else:
+                patient = Patient.objects.filter(patient_id=doc_id).first()
+                if not patient:
+                    return Response({"detail": "Document not found."}, status=status.HTTP_404_NOT_FOUND)
 
-            file_path = patient.discharge_summary_path
-            # Check authorization: Admin, Owning Patient, or Doctor
-            if user.role == Role.ADMIN:
-                has_access = True
-            elif user.role == Role.PATIENT and hasattr(user, 'patient') and user.patient.patient_id == patient.patient_id:
-                has_access = True
-            elif user.role == Role.DOCTOR:
-                has_access = True
+                file_path = patient.discharge_summary_path
+                # Check authorization: Admin, Owning Patient, or Doctor
+                if user.role == Role.ADMIN:
+                    has_access = True
+                elif user.role == Role.PATIENT and hasattr(user, 'patient') and user.patient.patient_id == patient.patient_id:
+                    has_access = True
+                elif user.role == Role.DOCTOR:
+                    has_access = True
 
         elif doc_type == 'caregiver_identity_proof':
             caregiver = Caregiver.objects.filter(caregiver_id=doc_id).first()
@@ -250,6 +273,25 @@ class SecureDocumentView(APIView):
             if user.role == Role.ADMIN:
                 has_access = True
             elif user.role == Role.CAREGIVER and hasattr(user, 'caregiver') and user.caregiver.caregiver_id == caregiver.caregiver_id:
+                has_access = True
+
+        elif doc_type == 'lab_report':
+            from medical_records.models import LabReport
+            lab_report = LabReport.objects.filter(report_id=doc_id).first()
+            if not lab_report:
+                return Response({"detail": "Laboratory report document not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            file_path = lab_report.file_path
+            # Check authorization: Admin, Owning Patient, Attending Doctor, or Nurse
+            if user.role == Role.ADMIN:
+                has_access = True
+            elif user.role == Role.PATIENT and hasattr(user, 'patient') and user.patient.patient_id == lab_report.patient.patient_id:
+                has_access = True
+            elif user.role == Role.DOCTOR:
+                has_access = True
+            elif user.role == Role.NURSE:
+                has_access = True
+            elif user.role == Role.CAREGIVER and hasattr(user, 'caregiver') and lab_report.patient.caregivers.filter(caregiver_id=user.caregiver.caregiver_id).exists():
                 has_access = True
 
         else:
@@ -362,9 +404,12 @@ class CurrentUserProfileView(APIView):
             profile_data["details"] = {
                 "doctor_id": d.doctor_id,
                 "specialization": d.specialization,
+                "service_area": d.service_area,
                 "phone": d.phone,
-                "panchayath": d.panchayath,
-                "pincode": d.pincode,
+                "gender": d.gender,
+                "date_of_birth": str(d.date_of_birth) if d.date_of_birth else None,
+                "qualification": d.qualification,
+                "experience": d.experience,
             }
         elif user.role == Role.NURSE and hasattr(user, 'nurse'):
             n = user.nurse
@@ -372,19 +417,62 @@ class CurrentUserProfileView(APIView):
             profile_data["status"] = n.verification_status
             profile_data["details"] = {
                 "nurse_id": n.nurse_id,
+                "service_area": n.service_area,
+                "specialization": n.specialization,
                 "phone": n.phone,
-                "panchayath": n.panchayath,
-                "pincode": n.pincode,
+                "gender": n.gender,
+                "date_of_birth": str(n.date_of_birth) if n.date_of_birth else None,
+                "qualification": n.qualification,
+                "experience": n.experience,
             }
         elif user.role == Role.ADMIN and hasattr(user, 'administrator'):
             a = user.administrator
             profile_data["name"] = a.name
             profile_data["details"] = {
                 "admin_id": a.admin_id,
+                "admin_code": f"KG-ADM-{str(a.admin_id).zfill(4)}",
                 "phone": a.phone,
+                "gender": a.gender,
+                "date_of_birth": str(a.date_of_birth) if a.date_of_birth else None,
+                "qualification": a.qualification,
+                "experience": a.experience if a.experience is not None else 0,
+                "designation": "System Administrator",
+                "created_at": a.created_at.isoformat() if a.created_at else None,
             }
 
         return Response(profile_data, status=status.HTTP_200_OK)
+
+
+class CheckApplicationStatusView(APIView):
+    """
+    Public Endpoint: Check Patient Application Status by Application ID + Email.
+    Returns strictly safe non-sensitive status information.
+    """
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
+    def post(self, request, *args, **kwargs):
+        serializer = PublicApplicationStatusSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(
+                {"errors": {"detail": ["We could not find an application matching the provided details."]}},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        app = serializer.validated_data['application']
+
+        # Format clean, non-sensitive response
+        data = {
+            "application_id": app.application_id,
+            "name": app.name,
+            "registration_status": app.registration_status,
+            "rejection_reason": app.rejection_reason if app.registration_status == RegistrationStatus.REJECTED else None,
+            "submitted_at": app.created_at.strftime('%d %b %Y, %I:%M %p') if app.created_at else None,
+            "reviewed_at": app.reviewed_at.strftime('%d %b %Y, %I:%M %p') if app.reviewed_at else None,
+        }
+
+        return Response(data, status=status.HTTP_200_OK)
 
 
 # --- DOCTOR PATIENT APPROVAL ENDPOINTS ---
@@ -396,8 +484,10 @@ class DoctorPendingPatientsView(APIView):
         if request.user.role != Role.DOCTOR:
             return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
 
-        pending_patients = Patient.objects.filter(registration_status=RegistrationStatus.PENDING).order_by('-created_at')
-        serializer = PendingPatientSerializer(pending_patients, many=True)
+        pending_applications = PatientRegistrationApplication.objects.filter(
+            registration_status=RegistrationStatus.PENDING
+        ).order_by('-created_at')
+        serializer = PendingPatientSerializer(pending_applications, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -408,11 +498,11 @@ class DoctorPatientDetailView(APIView):
         if request.user.role != Role.DOCTOR:
             return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
 
-        patient = Patient.objects.filter(patient_id=patient_id).first()
-        if not patient:
-            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
+        application = PatientRegistrationApplication.objects.filter(id=patient_id).first()
+        if not application:
+            return Response({"detail": "Patient application record not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        serializer = PendingPatientSerializer(patient)
+        serializer = PendingPatientSerializer(application)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
 
@@ -423,26 +513,87 @@ class DoctorApprovePatientView(APIView):
         if request.user.role != Role.DOCTOR:
             return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
 
-        patient = Patient.objects.filter(patient_id=patient_id).first()
-        if not patient:
-            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
+        import uuid
+        from django.db import transaction
 
-        if patient.registration_status != RegistrationStatus.PENDING:
-            return Response(
-                {"errors": {"detail": [f"This patient registration has already been {patient.registration_status.lower()}."]}},
-                status=status.HTTP_400_BAD_REQUEST,
+        with transaction.atomic():
+            application = (
+                PatientRegistrationApplication.objects
+                .select_for_update()
+                .filter(id=patient_id)
+                .first()
+            )
+            if not application:
+                return Response({"detail": "Patient application record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            if application.registration_status != RegistrationStatus.PENDING:
+                return Response(
+                    {"errors": {"detail": [f"This application has already been {application.registration_status.lower()}."]}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Check if a User already exists with this email
+            if User.objects.filter(email__iexact=application.email).exists():
+                return Response(
+                    {"errors": {"detail": ["A User account with this email address already exists in the system."]}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # 1. Create User with role=PATIENT using temporary password hash
+            user = User(
+                email=application.email,
+                role=Role.PATIENT,
+                is_active=True,
+            )
+            if application.password_hash:
+                user.password = application.password_hash
+            else:
+                user.set_unusable_password()
+            user.save()
+
+            # 2. Generate unique Registration ID & Create Patient record linked to User
+            reg_id = f"KG-P-{uuid.uuid4().hex[:8].upper()}"
+            doctor_instance = getattr(request.user, 'doctor', None)
+
+            patient = Patient.objects.create(
+                user=user,
+                registration_id=reg_id,
+                name=application.name,
+                dob=application.dob,
+                gender=application.gender,
+                phone=application.phone,
+                house_name=application.house_name,
+                place=application.place,
+                panchayath=application.panchayath,
+                ward_no=application.ward_no,
+                pincode=application.pincode,
+                discharge_summary_path=application.discharge_summary_path,
+                emergency_contact_name=application.emergency_contact_name,
+                emergency_contact_phone=application.emergency_contact_phone,
+                registration_status=RegistrationStatus.APPROVED,
+                status=PatientStatus.ACTIVE,
+                reviewed_by_doctor=doctor_instance,
             )
 
-        patient.registration_status = RegistrationStatus.APPROVED
-        patient.rejection_reason = None
-        if hasattr(request.user, 'doctor'):
-            patient.reviewed_by_doctor = request.user.doctor
-        patient.save()
+            # 3. Update Application status, link created patient, and clear temporary password hash
+            application.registration_status = RegistrationStatus.APPROVED
+            application.rejection_reason = None
+            application.reviewed_by_doctor = doctor_instance
+            application.reviewed_at = timezone.now()
+            application.created_patient = patient
+            application.password_hash = None  # Clear password hash once processed
+            application.save()
 
-        create_status_notification(patient.user, status=RegistrationStatus.APPROVED, role='Patient')
+            # 4. Create in-app status notification for the newly created user
+            create_status_notification(user, status=RegistrationStatus.APPROVED, role='Patient')
 
         return Response(
-            {"message": f"Patient '{patient.name}' registration approved successfully.", "patient_id": patient.patient_id},
+            {
+                "message": f"Patient '{patient.name}' registration approved successfully.",
+                "application_id": application.application_id,
+                "patient_id": patient.patient_id,
+                "registration_id": patient.registration_id,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -454,15 +605,7 @@ class DoctorRejectPatientView(APIView):
         if request.user.role != Role.DOCTOR:
             return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
 
-        patient = Patient.objects.filter(patient_id=patient_id).first()
-        if not patient:
-            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        if patient.registration_status != RegistrationStatus.PENDING:
-            return Response(
-                {"errors": {"detail": [f"This patient registration has already been {patient.registration_status.lower()}."]}},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        from django.db import transaction
 
         rejection_reason = request.data.get('rejection_reason', '').strip()
         if not rejection_reason:
@@ -471,16 +614,39 @@ class DoctorRejectPatientView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        patient.registration_status = RegistrationStatus.REJECTED
-        patient.rejection_reason = rejection_reason
-        if hasattr(request.user, 'doctor'):
-            patient.reviewed_by_doctor = request.user.doctor
-        patient.save()
+        with transaction.atomic():
+            application = (
+                PatientRegistrationApplication.objects
+                .select_for_update()
+                .filter(id=patient_id)
+                .first()
+            )
+            if not application:
+                return Response({"detail": "Patient application record not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        create_status_notification(patient.user, status=RegistrationStatus.REJECTED, role='Patient', rejection_reason=rejection_reason)
+            if application.registration_status != RegistrationStatus.PENDING:
+                return Response(
+                    {"errors": {"detail": [f"This application has already been {application.registration_status.lower()}."]}},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            doctor_instance = getattr(request.user, 'doctor', None)
+
+            # Update application as REJECTED, record reason & doctor, clear password hash
+            application.registration_status = RegistrationStatus.REJECTED
+            application.rejection_reason = rejection_reason
+            application.reviewed_by_doctor = doctor_instance
+            application.reviewed_at = timezone.now()
+            application.password_hash = None  # Never retain password hash on rejected applications
+            application.save()
+
+            # NO User created, NO Patient created. Old application preserved in DB.
 
         return Response(
-            {"message": f"Patient '{patient.name}' registration rejected.", "patient_id": patient.patient_id},
+            {
+                "message": f"Patient '{application.name}' registration rejected.",
+                "application_id": application.application_id,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -672,6 +838,166 @@ from medical_records.models import LabReport
 from notifications.models import Notification
 
 
+class AdminProfileView(APIView):
+    """
+    View and update profile information for the authenticated Administrator.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        if request.user.role != Role.ADMIN or not hasattr(request.user, 'administrator'):
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        admin = request.user.administrator
+        data = {
+            "admin_id": admin.admin_id,
+            "admin_code": f"KG-ADM-{str(admin.admin_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": admin.name,
+            "email": request.user.email,
+            "phone": admin.phone or "",
+            "gender": admin.gender or "",
+            "date_of_birth": str(admin.date_of_birth) if admin.date_of_birth else None,
+            "qualification": admin.qualification or "",
+            "experience": admin.experience if admin.experience is not None else 0,
+            "designation": "System Administrator",
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": admin.created_at.isoformat() if admin.created_at else None,
+            "updated_at": admin.updated_at.isoformat() if admin.updated_at else None,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        if request.user.role != Role.ADMIN or not hasattr(request.user, 'administrator'):
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        admin = request.user.administrator
+        errors = {}
+
+        # 1. Name validation
+        name = request.data.get('name')
+        if name is not None:
+            name_val = str(name).strip()
+            if not name_val:
+                errors['name'] = ["Full Name cannot be empty."]
+            elif len(name_val) > 100:
+                errors['name'] = ["Full Name cannot exceed 100 characters."]
+            else:
+                admin.name = name_val
+
+        # 2. Phone validation
+        phone = request.data.get('phone')
+        if phone is not None:
+            phone_val = str(phone).strip()
+            if phone_val and not re.match(r'^\d{10}$', phone_val):
+                errors['phone'] = ["Phone number must be a valid 10-digit number."]
+            else:
+                admin.phone = phone_val
+
+        # 3. Gender validation
+        gender = request.data.get('gender')
+        if gender is not None:
+            admin.gender = str(gender).strip()
+
+        # 4. Date of Birth validation
+        date_of_birth = request.data.get('date_of_birth')
+        if date_of_birth is not None:
+            if date_of_birth == '' or date_of_birth is None:
+                admin.date_of_birth = None
+            else:
+                try:
+                    dob_parsed = date.fromisoformat(str(date_of_birth).strip())
+                    if dob_parsed >= date.today():
+                        errors['date_of_birth'] = ["Date of birth must be a past date."]
+                    else:
+                        admin.date_of_birth = dob_parsed
+                except (ValueError, TypeError):
+                    errors['date_of_birth'] = ["Invalid date format. Please use YYYY-MM-DD."]
+
+        # 5. Qualification validation
+        qualification = request.data.get('qualification')
+        if qualification is not None:
+            admin.qualification = str(qualification).strip()
+
+        # 6. Experience validation
+        experience = request.data.get('experience')
+        if experience is not None:
+            if experience == '' or experience is None:
+                admin.experience = 0
+            else:
+                try:
+                    exp_val = int(experience)
+                    if exp_val < 0 or exp_val > 80:
+                        errors['experience'] = ["Experience must be between 0 and 80 years."]
+                    else:
+                        admin.experience = exp_val
+                except (ValueError, TypeError):
+                    errors['experience'] = ["Experience must be a valid non-negative integer."]
+
+        # 7. Email / Username validation and update
+        email = request.data.get('email')
+        if email is not None:
+            email_val = str(email).strip().lower()
+            if not email_val:
+                errors['email'] = ["Email / Username cannot be empty."]
+            elif not re.match(r'^[^@]+@[^@]+\.[^@]+$', email_val):
+                errors['email'] = ["Please enter a valid email address."]
+            elif email_val != request.user.email.lower():
+                if User.objects.filter(email__iexact=email_val).exclude(user_id=request.user.user_id).exists():
+                    errors['email'] = ["An account with this email / username already exists."]
+                else:
+                    request.user.email = email_val
+
+        # 8. Password change validation and update
+        new_password = request.data.get('new_password')
+        current_password = request.data.get('current_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if new_password:
+            if current_password is not None and not request.user.check_password(current_password):
+                errors['current_password'] = ["Current password is incorrect."]
+            if confirm_password is not None and new_password != confirm_password:
+                errors['confirm_password'] = ["New passwords do not match."]
+            try:
+                validate_password(new_password, user=request.user)
+            except DjangoValidationError as e:
+                errors['new_password'] = list(e.messages)
+
+        if errors:
+            return Response({"errors": errors, "message": "Please correct the validation errors."}, status=status.HTTP_400_BAD_REQUEST)
+
+        admin.save()
+        if new_password and 'new_password' not in errors:
+            request.user.set_password(new_password)
+        request.user.save()
+
+        updated_data = {
+            "admin_id": admin.admin_id,
+            "admin_code": f"KG-ADM-{str(admin.admin_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": admin.name,
+            "email": request.user.email,
+            "phone": admin.phone or "",
+            "gender": admin.gender or "",
+            "date_of_birth": str(admin.date_of_birth) if admin.date_of_birth else None,
+            "qualification": admin.qualification or "",
+            "experience": admin.experience if admin.experience is not None else 0,
+            "designation": "System Administrator",
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": admin.created_at.isoformat() if admin.created_at else None,
+            "updated_at": admin.updated_at.isoformat() if admin.updated_at else None,
+        }
+
+        return Response({
+            "message": "Profile updated successfully.",
+            "profile": updated_data
+        }, status=status.HTTP_200_OK)
+
+
 class AdminStatsView(APIView):
     """
     Returns real-time aggregated counts and analytics for the Administrator Dashboard.
@@ -803,7 +1129,7 @@ class AdminUserListView(APIView):
             if u.role == Role.DOCTOR and hasattr(u, 'doctor'):
                 name = f"Dr. {u.doctor.name}"
                 phone = u.doctor.phone or ""
-                address = f"{u.doctor.place}, {u.doctor.panchayath}" if u.doctor.place != 'N/A' else u.doctor.service_area or ""
+                address = u.doctor.service_area or ""
                 details = {
                     "specialization": u.doctor.specialization,
                     "service_area": u.doctor.service_area,
@@ -812,7 +1138,7 @@ class AdminUserListView(APIView):
             elif u.role == Role.NURSE and hasattr(u, 'nurse'):
                 name = f"Nurse {u.nurse.name}"
                 phone = u.nurse.phone or ""
-                address = f"{u.nurse.place}, {u.nurse.panchayath}" if u.nurse.place != 'N/A' else u.nurse.service_area or ""
+                address = u.nurse.service_area or ""
                 details = {
                     "service_area": u.nurse.service_area,
                     "verification_status": u.nurse.verification_status,
@@ -1429,7 +1755,8 @@ class PatientDashboardView(APIView):
         unread_notifications_count = Notification.objects.filter(user=request.user, is_read=False).count()
 
         # CARD 4: Active Prescriptions
-        active_prescriptions_count = Prescription.objects.filter(patient=patient, status='Active').count()
+        active_rx = Prescription.objects.filter(patient=patient, status='Active').first()
+        active_prescriptions_count = active_rx.prescriptionitem_set.count() if active_rx else 0
 
         # CARD 5: Assigned Caregiver
         caregiver_assignment = CaregiverPatientAssignment.objects.filter(
@@ -1662,8 +1989,8 @@ class PatientDashboardView(APIView):
 
 class PatientProfileView(APIView):
     """
-    View and update permitted personal information for the authenticated patient.
-    Clinical fields remain protected.
+    View and update profile information for the authenticated Patient.
+    Clinical fields (primary_diagnosis, disease_stage, registration_status, assigned doctor) remain protected.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1675,20 +2002,28 @@ class PatientProfileView(APIView):
         data = {
             "patient_id": patient.patient_id,
             "registration_id": patient.registration_id,
+            "user_id": request.user.user_id,
             "name": patient.name,
             "email": request.user.email,
-            "phone": patient.phone,
+            "phone": patient.phone or "",
             "dob": patient.dob.strftime('%Y-%m-%d') if patient.dob else None,
-            "gender": patient.gender,
-            "house_name": patient.house_name,
-            "place": patient.place,
-            "panchayath": patient.panchayath,
-            "ward_no": patient.ward_no,
-            "pincode": patient.pincode,
-            "emergency_contact_name": patient.emergency_contact_name,
-            "emergency_contact_phone": patient.emergency_contact_phone,
+            "date_of_birth": patient.dob.strftime('%Y-%m-%d') if patient.dob else None,
+            "gender": patient.gender or "",
+            "house_name": patient.house_name or "",
+            "place": patient.place or "",
+            "panchayath": patient.panchayath or "",
+            "ward_no": str(patient.ward_no) if patient.ward_no is not None else "",
+            "pincode": patient.pincode or "",
+            "emergency_contact_name": patient.emergency_contact_name or "",
+            "emergency_contact_phone": patient.emergency_contact_phone or "",
+            "doctor_name": patient.reviewed_by_doctor.name if patient.reviewed_by_doctor else "Not Assigned",
             "registration_status": patient.registration_status,
             "discharge_summary_path": patient.discharge_summary_path,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": patient.created_at.isoformat() if patient.created_at else None,
+            "updated_at": patient.updated_at.isoformat() if patient.updated_at else None,
         }
         return Response(data, status=status.HTTP_200_OK)
 
@@ -1697,21 +2032,146 @@ class PatientProfileView(APIView):
         if not patient:
             return Response({"detail": "Access restricted to Patients only."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Allow updating permitted contact and address fields
-        phone = request.data.get('phone', patient.phone)
-        if phone:
-            patient.phone = str(phone).strip()
+        errors = {}
 
-        patient.house_name = request.data.get('house_name', patient.house_name)
-        patient.place = request.data.get('place', patient.place)
-        patient.panchayath = request.data.get('panchayath', patient.panchayath)
-        patient.ward_no = request.data.get('ward_no', patient.ward_no)
-        patient.pincode = request.data.get('pincode', patient.pincode)
-        patient.emergency_contact_name = request.data.get('emergency_contact_name', patient.emergency_contact_name)
-        patient.emergency_contact_phone = request.data.get('emergency_contact_phone', patient.emergency_contact_phone)
+        # 1. Name validation
+        name = request.data.get('name')
+        if name is not None:
+            name_val = str(name).strip()
+            if not name_val:
+                errors['name'] = ["Full Name cannot be empty."]
+            elif len(name_val) > 100:
+                errors['name'] = ["Full Name cannot exceed 100 characters."]
+            else:
+                patient.name = name_val
+
+        # 2. Phone validation
+        phone = request.data.get('phone')
+        if phone is not None:
+            phone_val = str(phone).strip()
+            if phone_val and not re.match(r'^\d{10}$', phone_val):
+                errors['phone'] = ["Phone number must be a valid 10-digit number."]
+            else:
+                patient.phone = phone_val
+
+        # 3. Gender validation
+        gender = request.data.get('gender')
+        if gender is not None:
+            patient.gender = str(gender).strip()
+
+        # 4. Date of Birth validation
+        dob_input = request.data.get('date_of_birth') or request.data.get('dob')
+        if dob_input is not None:
+            if dob_input == '' or dob_input is None:
+                patient.dob = None
+            else:
+                try:
+                    dob_parsed = date.fromisoformat(str(dob_input).strip())
+                    if dob_parsed >= date.today():
+                        errors['date_of_birth'] = ["Date of birth must be a past date."]
+                    else:
+                        patient.dob = dob_parsed
+                except (ValueError, TypeError):
+                    errors['date_of_birth'] = ["Invalid date format. Please use YYYY-MM-DD."]
+
+        # 5. Address and contact fields
+        if 'house_name' in request.data:
+            patient.house_name = str(request.data.get('house_name') or '').strip()
+        if 'place' in request.data:
+            patient.place = str(request.data.get('place') or '').strip()
+        if 'panchayath' in request.data:
+            patient.panchayath = str(request.data.get('panchayath') or '').strip()
+        if 'ward_no' in request.data:
+            ward_raw = str(request.data.get('ward_no') or '').strip()
+            if ward_raw:
+                try:
+                    patient.ward_no = int(ward_raw)
+                except ValueError:
+                    errors['ward_no'] = ["Ward number must be a valid integer."]
+        if 'pincode' in request.data:
+            pincode_val = str(request.data.get('pincode') or '').strip()
+            if pincode_val and not re.match(r'^\d{6}$', pincode_val):
+                errors['pincode'] = ["Pincode must be a 6-digit number."]
+            else:
+                patient.pincode = pincode_val
+
+        if 'emergency_contact_name' in request.data:
+            patient.emergency_contact_name = str(request.data.get('emergency_contact_name') or '').strip()
+        if 'emergency_contact_phone' in request.data:
+            em_phone_val = str(request.data.get('emergency_contact_phone') or '').strip()
+            if em_phone_val and not re.match(r'^\d{10}$', em_phone_val):
+                errors['emergency_contact_phone'] = ["Emergency contact phone must be a 10-digit number."]
+            else:
+                patient.emergency_contact_phone = em_phone_val
+
+        # 6. Email / Username validation and update
+        email = request.data.get('email')
+        if email is not None:
+            email_val = str(email).strip().lower()
+            if not email_val:
+                errors['email'] = ["Email / Username cannot be empty."]
+            elif not re.match(r'^[^@]+@[^@]+\.[^@]+$', email_val):
+                errors['email'] = ["Please enter a valid email address."]
+            elif email_val != request.user.email.lower():
+                if User.objects.filter(email__iexact=email_val).exclude(user_id=request.user.user_id).exists():
+                    errors['email'] = ["An account with this email / username already exists."]
+                else:
+                    request.user.email = email_val
+
+        # 7. Password change validation and update
+        new_password = request.data.get('new_password')
+        current_password = request.data.get('current_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if new_password:
+            if current_password is not None and not request.user.check_password(current_password):
+                errors['current_password'] = ["Current password is incorrect."]
+            if confirm_password is not None and new_password != confirm_password:
+                errors['confirm_password'] = ["New passwords do not match."]
+            try:
+                validate_password(new_password, user=request.user)
+            except DjangoValidationError as e:
+                errors['new_password'] = list(e.messages)
+
+        if errors:
+            return Response({"errors": errors, "message": "Please correct the validation errors."}, status=status.HTTP_400_BAD_REQUEST)
 
         patient.save()
-        return Response({"message": "Profile updated successfully."}, status=status.HTTP_200_OK)
+        if new_password and 'new_password' not in errors:
+            request.user.set_password(new_password)
+        request.user.save()
+
+        updated_data = {
+            "patient_id": patient.patient_id,
+            "registration_id": patient.registration_id,
+            "user_id": request.user.user_id,
+            "name": patient.name,
+            "email": request.user.email,
+            "phone": patient.phone or "",
+            "dob": patient.dob.strftime('%Y-%m-%d') if patient.dob else None,
+            "date_of_birth": patient.dob.strftime('%Y-%m-%d') if patient.dob else None,
+            "gender": patient.gender or "",
+            "house_name": patient.house_name or "",
+            "place": patient.place or "",
+            "panchayath": patient.panchayath or "",
+            "ward_no": str(patient.ward_no) if patient.ward_no is not None else "",
+            "pincode": patient.pincode or "",
+            "emergency_contact_name": patient.emergency_contact_name or "",
+            "emergency_contact_phone": patient.emergency_contact_phone or "",
+            "doctor_name": patient.reviewed_by_doctor.name if patient.reviewed_by_doctor else "Not Assigned",
+            "registration_status": patient.registration_status,
+            "discharge_summary_path": patient.discharge_summary_path,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": patient.created_at.isoformat() if patient.created_at else None,
+            "updated_at": patient.updated_at.isoformat() if patient.updated_at else None,
+        }
+
+        return Response({
+            "message": "Profile updated successfully.",
+            "profile": updated_data
+        }, status=status.HTTP_200_OK)
 
 
 class PatientMedicalHistoryView(APIView):
@@ -1731,7 +2191,7 @@ class PatientMedicalHistoryView(APIView):
         diagnoses = [
             {
                 "id": d.diagnosis_id,
-                "text": d.diagnosis_text,
+                "text": d.diagnosis_text.lstrip(': ').strip() if d.diagnosis_text else "",
                 "doctor": d.doctor.name if d.doctor else "Attending Physician",
                 "date": d.diagnosed_date.strftime('%d %b %Y') if d.diagnosed_date else "Recorded",
             }
@@ -1804,9 +2264,10 @@ class PatientPrescriptionsView(APIView):
 
         from medical_records.models import Prescription, PrescriptionItem
 
-        prescriptions = Prescription.objects.filter(patient=patient).prefetch_related('items').order_by('-created_at')
+        prescriptions = Prescription.objects.filter(patient=patient).select_related('doctor').prefetch_related('prescriptionitem_set').order_by('-version_number', '-created_at')
         results = []
         for rx in prescriptions:
+            items_qs = rx.prescriptionitem_set.all() if hasattr(rx, 'prescriptionitem_set') else getattr(rx, 'items', PrescriptionItem.objects.none()).all()
             items = [
                 {
                     "item_id": itm.item_id,
@@ -1816,7 +2277,7 @@ class PatientPrescriptionsView(APIView):
                     "duration_days": itm.duration_days,
                     "change_type": itm.change_type,
                 }
-                for itm in rx.items.all()
+                for itm in items_qs
             ]
             results.append({
                 "prescription_id": rx.prescription_id,
@@ -1833,6 +2294,8 @@ class PatientPrescriptionsView(APIView):
 class PatientLabReportsView(APIView):
     """
     Laboratory reports and document access for authenticated patient.
+    GET: List patient's uploaded laboratory reports.
+    POST: Upload new laboratory report document.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1843,19 +2306,107 @@ class PatientLabReportsView(APIView):
 
         from medical_records.models import LabReport
 
-        reports = LabReport.objects.filter(patient=patient).order_by('-uploaded_at')
-        results = [
-            {
+        reports = LabReport.objects.filter(patient=patient).select_related('reviewed_by', 'reviewed_by__doctor').order_by('-uploaded_at')
+        results = []
+        for lr in reports:
+            doc_name = None
+            if lr.reviewed_by:
+                if hasattr(lr.reviewed_by, 'doctor') and lr.reviewed_by.doctor:
+                    doc_name = lr.reviewed_by.doctor.name
+                else:
+                    doc_name = lr.reviewed_by.email
+
+            results.append({
                 "report_id": lr.report_id,
-                "report_date": lr.report_date.strftime('%d %b %Y') if lr.report_date else "N/A",
+                "investigation_name": lr.investigation_name or "Diagnostic Laboratory Report",
+                "report_date": lr.report_date.strftime('%d %b %Y') if lr.report_date else (lr.uploaded_at.strftime('%d %b %Y') if lr.uploaded_at else "N/A"),
                 "uploaded_at": lr.uploaded_at.strftime('%d %b %Y') if lr.uploaded_at else "N/A",
                 "review_status": lr.review_status,
-                "remarks": lr.remarks or "Diagnostic Laboratory Report",
+                "reviewed_by": doc_name,
+                "reviewed_at": lr.reviewed_at.strftime('%d %b %Y, %H:%M') if lr.reviewed_at else None,
+                "remarks": lr.remarks if lr.review_status == 'Reviewed' else None,
                 "file_path": lr.file_path,
-            }
-            for lr in reports
-        ]
+                "view_url": f"/api/auth/documents/view/?type=lab_report&id={lr.report_id}",
+            })
         return Response(results, status=status.HTTP_200_OK)
+
+    def post(self, request, *args, **kwargs):
+        patient = get_authenticated_patient(request)
+        if not patient:
+            return Response({"detail": "Access restricted to Patients only."}, status=status.HTTP_403_FORBIDDEN)
+
+        from medical_records.models import LabReport, ReviewStatus
+        from django.core.files.storage import default_storage
+        import uuid
+        import os
+        from datetime import datetime
+
+        investigation_name = request.data.get('investigation_name', '').strip()
+        if not investigation_name:
+            return Response(
+                {"errors": {"investigation_name": ["Investigation / Test name is required."]}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if len(investigation_name) > 150:
+            investigation_name = investigation_name[:150]
+
+        file_obj = request.FILES.get('file')
+        if not file_obj:
+            return Response(
+                {"errors": {"file": ["Please select a laboratory report document (PDF, JPEG, PNG)."]}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Validate file format and size
+        ext = os.path.splitext(file_obj.name)[1].lower()
+        allowed_extensions = ['.pdf', '.jpg', '.jpeg', '.png', '.webp']
+        if ext not in allowed_extensions:
+            return Response(
+                {"errors": {"file": [f"Unsupported file format '{ext}'. Allowed formats: PDF, JPEG, PNG, WEBP."]}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if file_obj.size > 15 * 1024 * 1024:  # 15 MB limit
+            return Response(
+                {"errors": {"file": ["File size exceeds maximum allowed limit of 15MB."]}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Generate secure storage path
+        safe_filename = f"lab_reports/lab_{uuid.uuid4().hex[:12]}{ext}"
+        saved_path = default_storage.save(safe_filename, file_obj)
+
+        report_date_raw = request.data.get('report_date')
+        report_date = None
+        if report_date_raw:
+            try:
+                report_date = datetime.strptime(str(report_date_raw).split('T')[0], '%Y-%m-%d').date()
+            except ValueError:
+                report_date = timezone.now().date()
+        else:
+            report_date = timezone.now().date()
+
+        new_report = LabReport.objects.create(
+            patient=patient,
+            uploaded_by=request.user,
+            investigation_name=investigation_name,
+            file_path=saved_path,
+            report_date=report_date,
+            review_status=ReviewStatus.PENDING,
+            reviewed_by=None,
+            remarks=None,
+            reviewed_at=None,
+        )
+
+        return Response({
+            "message": "Laboratory report uploaded successfully.",
+            "report_id": new_report.report_id,
+            "investigation_name": new_report.investigation_name,
+            "report_date": new_report.report_date.strftime('%d %b %Y'),
+            "uploaded_at": new_report.uploaded_at.strftime('%d %b %Y'),
+            "review_status": new_report.review_status,
+            "view_url": f"/api/auth/documents/view/?type=lab_report&id={new_report.report_id}",
+        }, status=status.HTTP_201_CREATED)
 
 
 class PatientNutritionView(APIView):
@@ -1902,38 +2453,53 @@ class PatientHomeVisitsView(APIView):
 
         from care_coordination.models import HomeVisitSchedule, HomeVisitOccurrence, HomeVisitSummary
 
-        schedule = HomeVisitSchedule.objects.filter(patient=patient, status='Active').first()
+        schedule = HomeVisitSchedule.objects.select_related('nurse').filter(patient=patient, status='Active').first()
         schedule_data = None
         if schedule:
             schedule_data = {
                 "schedule_id": schedule.schedule_id,
                 "frequency": schedule.frequency,
-                "doctor_name": schedule.doctor.name if schedule.doctor else "Doctor",
+                "nurse_name": schedule.nurse.name if schedule.nurse else "Nurse",
+                "doctor_name": f"Dr. {patient.reviewed_by_doctor.name}" if patient.reviewed_by_doctor else "Assigned Doctor",
                 "start_date": schedule.start_date.strftime('%d %b %Y'),
                 "status": schedule.status,
             }
 
-        occurrences = HomeVisitOccurrence.objects.filter(patient=patient).order_by('-scheduled_date')
+        occurrences = HomeVisitOccurrence.objects.select_related(
+            'allocated_nurse', 'visiting_doctor'
+        ).prefetch_related('homevisitsummary__visitsymptom_set').filter(patient=patient).order_by('-scheduled_date')
+
         occurrences_data = []
         for occ in occurrences:
-            summary = getattr(occ, 'summary', None)
+            summary = getattr(occ, 'homevisitsummary', None) or getattr(occ, 'summary', None)
             summary_data = None
             if summary:
+                symptoms = [{"name": s.symptom_name, "severity": s.severity} for s in summary.visitsymptom_set.all()]
                 summary_data = {
+                    "summary_id": summary.summary_id,
                     "blood_pressure": summary.blood_pressure,
                     "pulse": summary.pulse,
-                    "temperature": summary.temperature,
+                    "temperature": str(summary.temperature) if summary.temperature else None,
                     "oxygen_level": summary.oxygen_level,
                     "treatment_notes": summary.treatment_notes,
+                    "next_visit_recommendation": summary.next_visit_recommendation.strftime('%d %b %Y') if summary.next_visit_recommendation else None,
+                    "nurse_name": summary.nurse.name if summary.nurse else "Nurse",
+                    "recorded_at": summary.recorded_at.strftime('%d %b %Y, %H:%M'),
+                    "symptoms": symptoms,
                 }
             occurrences_data.append({
                 "occurrence_id": occ.occurrence_id,
                 "scheduled_date": occ.scheduled_date.strftime('%d %b %Y'),
+                "raw_date": str(occ.scheduled_date),
                 "visit_type": occ.visit_type,
-                "urgency_level": occ.urgency_level,
+                "urgency_level": occ.urgency_level or "Routine",
                 "status": occ.status,
+                "allocated_nurse_name": occ.allocated_nurse.name if occ.allocated_nurse else "Community Nurse",
+                "visiting_doctor_name": f"Dr. {occ.visiting_doctor.name}" if occ.visiting_doctor else "Assigned Doctor",
                 "nurse_name": occ.allocated_nurse.name if occ.allocated_nurse else "Community Nurse",
-                "notes": occ.notes,
+                "doctor_name": f"Dr. {occ.visiting_doctor.name}" if occ.visiting_doctor else "Assigned Doctor",
+                "team_summary": f"Nurse: {occ.allocated_nurse.name if occ.allocated_nurse else 'Unallocated'} | Doctor: {f'Dr. {occ.visiting_doctor.name}' if occ.visiting_doctor else 'Unassigned'}",
+                "notes": occ.notes or "",
                 "summary": summary_data,
             })
 
@@ -1954,9 +2520,7 @@ class PatientHomeVisitsView(APIView):
         urgency = request.data.get('urgency_level', UrgencyLevel.ROUTINE)
 
         if request_type == 'schedule_change':
-            # Recurring schedule change request
             req_freq = request.data.get('frequency', 'Weekly')
-            # Save or log schedule change request
             return Response({
                 "message": f"Schedule change request to '{req_freq}' submitted successfully. The care team will review your request."
             }, status=status.HTTP_201_CREATED)
@@ -1970,7 +2534,7 @@ class PatientHomeVisitsView(APIView):
                 pass
 
         visit_type = VisitType.ADDITIONAL if request_type == 'additional' else VisitType.RECURRING
-        schedule = HomeVisitSchedule.objects.filter(patient=patient, status='Active').first()
+        schedule = HomeVisitSchedule.objects.filter(patient=patient, status='Active').first() if visit_type == VisitType.RECURRING else None
 
         occurrence = HomeVisitOccurrence.objects.create(
             schedule=schedule,
@@ -1980,6 +2544,7 @@ class PatientHomeVisitsView(APIView):
             urgency_level=urgency,
             status=OccurrenceStatus.SCHEDULED,
             requested_by=request.user,
+            visiting_doctor=patient.reviewed_by_doctor,
             notes=notes or ("Additional home visit requested by patient" if visit_type == VisitType.ADDITIONAL else "Home visit requested by patient"),
         )
 
@@ -2246,12 +2811,27 @@ class PatientTimelineView(APIView):
         for lr in LabReport.objects.filter(patient=patient):
             events.append({
                 "category": "Diagnostics",
-                "event": "Laboratory Report Uploaded",
-                "date": lr.uploaded_at.strftime('%d %b %Y') if lr.uploaded_at else "Diagnostic Record",
-                "description": lr.remarks or "Diagnostic test results recorded.",
+                "event": f"Laboratory Report Uploaded: {lr.investigation_name or 'Lab Report'}",
+                "date": lr.uploaded_at.strftime('%d %b %Y, %H:%M') if lr.uploaded_at else (lr.report_date.strftime('%d %b %Y') if lr.report_date else "Uploaded"),
+                "description": f"{lr.investigation_name or 'Diagnostic report'} uploaded by patient (Report Date: {lr.report_date.strftime('%d %b %Y') if lr.report_date else 'N/A'}).",
                 "status": lr.review_status,
                 "raw_date": str(lr.uploaded_at or lr.report_date or ''),
             })
+            if lr.review_status == 'Reviewed':
+                doc_name = "Doctor"
+                if lr.reviewed_by:
+                    if hasattr(lr.reviewed_by, 'doctor') and lr.reviewed_by.doctor:
+                        doc_name = lr.reviewed_by.doctor.name
+                    else:
+                        doc_name = lr.reviewed_by.email
+                events.append({
+                    "category": "Clinical Review",
+                    "event": f"Laboratory Report Reviewed: {lr.investigation_name or 'Lab Report'}",
+                    "date": lr.reviewed_at.strftime('%d %b %Y, %H:%M') if lr.reviewed_at else (lr.updated_at.strftime('%d %b %Y, %H:%M') if lr.updated_at else "Reviewed"),
+                    "description": f"Reviewed by {doc_name}. Clinical Remarks: {lr.remarks or 'No remarks'}",
+                    "status": "Reviewed",
+                    "raw_date": str(lr.reviewed_at or lr.updated_at or ''),
+                })
 
         # 7. Equipment
         for eq in EquipmentRequest.objects.filter(patient=patient):
@@ -2277,6 +2857,1622 @@ class PatientTimelineView(APIView):
 
         events.sort(key=lambda x: x.get('raw_date', ''), reverse=True)
         return Response(events, status=status.HTTP_200_OK)
+
+
+# ========================================================
+# PHASE 1 DOCTOR PORTAL APIS (AUTHENTICATED DOCTOR ONLY)
+# ========================================================
+
+def get_authenticated_doctor(request):
+    if request.user.role != Role.DOCTOR:
+        return None
+    return getattr(request.user, 'doctor', None) or Doctor.objects.filter(user=request.user).first()
+
+
+class DoctorProfileView(APIView):
+    """
+    View and update profile information for the authenticated Doctor.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        data = {
+            "doctor_id": doctor.doctor_id,
+            "doctor_code": f"KG-DOC-{str(doctor.doctor_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": doctor.name,
+            "email": request.user.email,
+            "phone": doctor.phone or "",
+            "gender": doctor.gender or "",
+            "date_of_birth": str(doctor.date_of_birth) if doctor.date_of_birth else None,
+            "qualification": doctor.qualification or "",
+            "experience": doctor.experience if doctor.experience is not None else 0,
+            "specialization": doctor.specialization or "Community Palliative Medicine",
+            "service_area": doctor.service_area or "",
+            "is_available_now": doctor.is_available_now,
+            "verification_status": doctor.verification_status,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": doctor.created_at.isoformat() if doctor.created_at else None,
+            "updated_at": doctor.updated_at.isoformat() if doctor.updated_at else None,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        errors = {}
+
+        # 1. Name validation
+        name = request.data.get('name')
+        if name is not None:
+            name_val = str(name).strip()
+            if not name_val:
+                errors['name'] = ["Doctor's Full Name cannot be empty."]
+            elif len(name_val) > 100:
+                errors['name'] = ["Full Name cannot exceed 100 characters."]
+            else:
+                doctor.name = name_val
+
+        # 2. Phone validation
+        phone = request.data.get('phone')
+        if phone is not None:
+            phone_val = str(phone).strip()
+            if phone_val and not re.match(r'^\d{10}$', phone_val):
+                errors['phone'] = ["Phone number must be a valid 10-digit number."]
+            else:
+                doctor.phone = phone_val
+
+        # 3. Gender validation
+        gender = request.data.get('gender')
+        if gender is not None:
+            doctor.gender = str(gender).strip()
+
+        # 4. Date of Birth validation
+        date_of_birth = request.data.get('date_of_birth')
+        if date_of_birth is not None:
+            if date_of_birth == '' or date_of_birth is None:
+                doctor.date_of_birth = None
+            else:
+                try:
+                    dob_parsed = date.fromisoformat(str(date_of_birth).strip())
+                    if dob_parsed >= date.today():
+                        errors['date_of_birth'] = ["Date of birth must be a past date."]
+                    else:
+                        doctor.date_of_birth = dob_parsed
+                except (ValueError, TypeError):
+                    errors['date_of_birth'] = ["Invalid date format. Please use YYYY-MM-DD."]
+
+        # 5. Qualification validation
+        qualification = request.data.get('qualification')
+        if qualification is not None:
+            doctor.qualification = str(qualification).strip()
+
+        # 6. Experience validation
+        experience = request.data.get('experience')
+        if experience is not None:
+            if experience == '' or experience is None:
+                doctor.experience = 0
+            else:
+                try:
+                    exp_val = int(experience)
+                    if exp_val < 0 or exp_val > 80:
+                        errors['experience'] = ["Experience must be between 0 and 80 years."]
+                    else:
+                        doctor.experience = exp_val
+                except (ValueError, TypeError):
+                    errors['experience'] = ["Experience must be a valid non-negative integer."]
+
+        # 7. Specialization validation
+        specialization = request.data.get('specialization')
+        if specialization is not None:
+            doctor.specialization = str(specialization).strip()
+
+        # 8. Service area validation
+        service_area = request.data.get('service_area')
+        if service_area is not None:
+            doctor.service_area = str(service_area).strip()
+
+        # 9. Email / Username validation and update
+        email = request.data.get('email')
+        if email is not None:
+            email_val = str(email).strip().lower()
+            if not email_val:
+                errors['email'] = ["Email / Username cannot be empty."]
+            elif not re.match(r'^[^@]+@[^@]+\.[^@]+$', email_val):
+                errors['email'] = ["Please enter a valid email address."]
+            elif email_val != request.user.email.lower():
+                if User.objects.filter(email__iexact=email_val).exclude(user_id=request.user.user_id).exists():
+                    errors['email'] = ["An account with this email / username already exists."]
+                else:
+                    request.user.email = email_val
+
+        # 10. Password change validation and update
+        new_password = request.data.get('new_password')
+        current_password = request.data.get('current_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if new_password:
+            if current_password is not None and not request.user.check_password(current_password):
+                errors['current_password'] = ["Current password is incorrect."]
+            if confirm_password is not None and new_password != confirm_password:
+                errors['confirm_password'] = ["New passwords do not match."]
+            try:
+                validate_password(new_password, user=request.user)
+            except DjangoValidationError as e:
+                errors['new_password'] = list(e.messages)
+
+        if errors:
+            return Response({"errors": errors, "message": "Please correct the validation errors."}, status=status.HTTP_400_BAD_REQUEST)
+
+        doctor.save()
+        if new_password and 'new_password' not in errors:
+            request.user.set_password(new_password)
+        request.user.save()
+
+        updated_data = {
+            "doctor_id": doctor.doctor_id,
+            "doctor_code": f"KG-DOC-{str(doctor.doctor_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": doctor.name,
+            "email": request.user.email,
+            "phone": doctor.phone or "",
+            "gender": doctor.gender or "",
+            "date_of_birth": str(doctor.date_of_birth) if doctor.date_of_birth else None,
+            "qualification": doctor.qualification or "",
+            "experience": doctor.experience if doctor.experience is not None else 0,
+            "specialization": doctor.specialization or "Community Palliative Medicine",
+            "service_area": doctor.service_area or "",
+            "is_available_now": doctor.is_available_now,
+            "verification_status": doctor.verification_status,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": doctor.created_at.isoformat() if doctor.created_at else None,
+            "updated_at": doctor.updated_at.isoformat() if doctor.updated_at else None,
+        }
+
+        return Response({
+            "message": "Profile updated successfully.",
+            "profile": updated_data
+        }, status=status.HTTP_200_OK)
+
+
+class DoctorDashboardView(APIView):
+    """
+    Consolidated Doctor Dashboard Summary API:
+    Returns 5 summary metrics, today's schedule, pending patient registrations,
+    upcoming home visits, alerts & reminders, and recent patient activity.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        from care_coordination.models import (
+            TelemedicineConsultation,
+            HomeVisitSchedule,
+            HomeVisitOccurrence,
+            ConsultationStatus,
+            ScheduleStatus,
+            OccurrenceStatus
+        )
+        from medical_records.models import Prescription, LabReport, ReviewStatus, ActiveSupersededStatus
+        from resources.models import EquipmentRequest, DoctorApprovalStatus
+
+        today = timezone.now().date()
+        seven_days_later = today + timedelta(days=7)
+
+        # 1. Doctor Info
+        doctor_info = {
+            "doctor_id": doctor.doctor_id,
+            "name": doctor.name,
+            "specialization": doctor.specialization or "Palliative Medicine",
+            "service_area": doctor.service_area or "Community Network",
+            "is_available_now": doctor.is_available_now,
+            "phone": doctor.phone or "",
+            "email": request.user.email,
+        }
+
+        # 2. Metric 1: Total Patients (Active registered patients)
+        total_patients = Patient.objects.filter(registration_status=RegistrationStatus.APPROVED).count()
+
+        # 3. Metric 2: Today's Telemedicine Consultations
+        active_consult_statuses = [
+            ConsultationStatus.PENDING,
+            ConsultationStatus.ACCEPTED,
+            ConsultationStatus.SCHEDULED,
+            ConsultationStatus.IN_PROGRESS
+        ]
+        today_telemed_qs = TelemedicineConsultation.objects.filter(
+            doctor=doctor,
+            status__in=active_consult_statuses
+        ).filter(
+            scheduled_date=today
+        ) | TelemedicineConsultation.objects.filter(
+            doctor=doctor,
+            scheduled_date__isnull=True,
+            requested_date=today,
+            status__in=active_consult_statuses
+        )
+        today_telemed_count = today_telemed_qs.count()
+
+        # 4. Metric 3: Upcoming Home Visits (This week)
+        upcoming_visits_qs = HomeVisitOccurrence.objects.filter(
+            scheduled_date__gte=today,
+            scheduled_date__lte=seven_days_later,
+            status__in=[OccurrenceStatus.SCHEDULED]
+        ).order_by('scheduled_date')
+        upcoming_visits_count = upcoming_visits_qs.count()
+
+        # 5. Metric 4: Pending Actions (Registrations + Schedule changes + Equipment requests)
+        pending_registrations_count = PatientRegistrationApplication.objects.filter(registration_status=RegistrationStatus.PENDING).count()
+        pending_equipment_count = EquipmentRequest.objects.filter(doctor_approval_status=DoctorApprovalStatus.PENDING).count()
+        # Schedule changes count
+        pending_actions_count = pending_registrations_count + pending_equipment_count
+
+        # 6. Metric 5: Active Prescriptions
+        active_rx_count = Prescription.objects.filter(status=ActiveSupersededStatus.ACTIVE).count()
+
+        summary_cards = {
+            "total_patients": total_patients,
+            "today_telemedicine": today_telemed_count,
+            "upcoming_home_visits": upcoming_visits_count,
+            "pending_actions": pending_actions_count,
+            "active_prescriptions": active_rx_count,
+        }
+
+        # 7. Today's Schedule (Telemedicine + Home visits today)
+        today_schedule = []
+        for tc in today_telemed_qs:
+            time_str = tc.scheduled_start_time.strftime('%I:%M %p') if tc.scheduled_start_time else (tc.requested_time.strftime('%I:%M %p') if tc.requested_time else 'TBD')
+            today_schedule.append({
+                "id": f"telemed-{tc.consultation_id}",
+                "time": time_str,
+                "type": "Telemedicine Consultation",
+                "patient_name": tc.patient.name,
+                "patient_id": tc.patient.patient_id,
+                "patient_reg_id": tc.patient.registration_id,
+                "status": tc.status,
+                "meeting_link": tc.meeting_link,
+            })
+
+        for hv in HomeVisitOccurrence.objects.filter(scheduled_date=today):
+            today_schedule.append({
+                "id": f"visit-{hv.occurrence_id}",
+                "time": "10:00 AM",
+                "type": f"Home Visit ({hv.visit_type})",
+                "patient_name": hv.patient.name,
+                "patient_id": hv.patient.patient_id,
+                "patient_reg_id": hv.patient.registration_id,
+                "status": hv.status,
+                "meeting_link": None,
+            })
+
+        # 8. Pending Registrations List (top 4)
+        pending_regs = PatientRegistrationApplication.objects.filter(registration_status=RegistrationStatus.PENDING).order_by('-created_at')[:4]
+        pending_registrations_data = [
+            {
+                "patient_id": p.id,
+                "id": p.id,
+                "name": p.name,
+                "registration_id": p.application_id,
+                "application_id": p.application_id,
+                "gender": p.gender,
+                "place": p.place,
+                "submitted_date": p.created_at.strftime('%d %b %Y'),
+                "discharge_summary_path": p.discharge_summary_path,
+                "status": p.registration_status,
+            }
+            for p in pending_regs
+        ]
+
+        # 9. Upcoming Home Visits List (next 3)
+        upcoming_visits_data = [
+            {
+                "occurrence_id": occ.occurrence_id,
+                "patient_name": occ.patient.name,
+                "patient_reg_id": occ.patient.registration_id,
+                "scheduled_date": occ.scheduled_date.strftime('%d %b %Y'),
+                "visit_type": occ.visit_type,
+                "urgency_level": occ.urgency_level or "Routine",
+                "nurse_name": occ.allocated_nurse.name if occ.allocated_nurse else "Community Nurse",
+                "status": occ.status,
+            }
+            for occ in upcoming_visits_qs[:3]
+        ]
+
+        # 10. Alerts & Reminders
+        alerts = []
+        if pending_registrations_count > 0:
+            alerts.append({
+                "id": "alert-reg",
+                "type": "registration",
+                "message": f"{pending_registrations_count} patient registration{'s' if pending_registrations_count > 1 else ''} pending your clinical review.",
+                "action_view": "registration_review",
+            })
+        if pending_equipment_count > 0:
+            alerts.append({
+                "id": "alert-equip",
+                "type": "equipment",
+                "message": f"{pending_equipment_count} medical equipment request{'s' if pending_equipment_count > 1 else ''} require clinical necessity evaluation.",
+                "action_view": "equipment_requests",
+            })
+        pending_lab_count = LabReport.objects.filter(review_status=ReviewStatus.PENDING).count()
+        if pending_lab_count > 0:
+            alerts.append({
+                "id": "alert-lab",
+                "type": "lab_report",
+                "message": f"{pending_lab_count} laboratory investigation{'s' if pending_lab_count > 1 else ''} uploaded and awaiting clinical review.",
+                "action_view": "lab_reports",
+            })
+
+        # 11. Recent Patient Activity
+        recent_activity = []
+        for rx in Prescription.objects.all().order_by('-created_at')[:2]:
+            recent_activity.append({
+                "patient_name": rx.patient.name,
+                "event": f"Prescription v{rx.version_number} issued",
+                "date": rx.created_at.strftime('%d %b %Y'),
+                "category": "Prescription",
+            })
+        for lr in LabReport.objects.all().order_by('-uploaded_at')[:2]:
+            recent_activity.append({
+                "patient_name": lr.patient.name,
+                "event": f"Lab report uploaded ({lr.review_status})",
+                "date": lr.uploaded_at.strftime('%d %b %Y'),
+                "category": "Laboratory",
+            })
+
+        return Response({
+            "doctor_info": doctor_info,
+            "summary_cards": summary_cards,
+            "today_schedule": today_schedule,
+            "pending_registrations": pending_registrations_data,
+            "upcoming_home_visits": upcoming_visits_data,
+            "alerts_and_reminders": alerts,
+            "recent_patient_activity": recent_activity,
+        }, status=status.HTTP_200_OK)
+
+
+class DoctorAvailabilityView(APIView):
+    """
+    Toggle or update Doctor's Available Now status.
+    POST /api/doctor/availability/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        is_available = request.data.get('is_available_now')
+        if is_available is not None:
+            doctor.is_available_now = bool(is_available)
+        else:
+            doctor.is_available_now = not doctor.is_available_now
+
+        doctor.save(update_fields=['is_available_now'])
+        status_label = "Available Now" if doctor.is_available_now else "Unavailable"
+        return Response({
+            "message": f"Availability status set to {status_label}.",
+            "is_available_now": doctor.is_available_now,
+        }, status=status.HTTP_200_OK)
+
+
+class DoctorPatientListView(APIView):
+    """
+    Patient directory for Doctor:
+    GET: List patients with search & filtering.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        search_query = request.query_params.get('search', '').strip().lower()
+        status_filter = request.query_params.get('status', '').strip()
+
+        qs = Patient.objects.all().order_by('-created_at')
+
+        if status_filter and status_filter.lower() != 'all':
+            qs = qs.filter(registration_status__iexact=status_filter)
+
+        results = []
+        for p in qs:
+            if search_query:
+                match_name = search_query in p.name.lower()
+                match_reg = search_query in p.registration_id.lower()
+                match_phone = search_query in (p.phone or '').lower()
+                match_place = search_query in (p.place or '').lower()
+                if not (match_name or match_reg or match_phone or match_place):
+                    continue
+
+            results.append({
+                "patient_id": p.patient_id,
+                "name": p.name,
+                "registration_id": p.registration_id,
+                "dob": p.dob.strftime('%d %b %Y') if p.dob else None,
+                "gender": p.gender,
+                "phone": p.phone,
+                "house_name": p.house_name,
+                "place": p.place,
+                "panchayath": p.panchayath,
+                "ward_no": p.ward_no,
+                "pincode": p.pincode,
+                "registration_status": p.registration_status,
+                "status": p.status,
+                "discharge_summary_path": p.discharge_summary_path,
+                "created_at": p.created_at.strftime('%d %b %Y'),
+            })
+
+        return Response(results, status=status.HTTP_200_OK)
+
+
+class DoctorPatientMedicalProfileView(APIView):
+    """
+    Detailed Patient Medical Profile for Doctor:
+    GET: Return full clinical profile (demographics, diagnoses, allergies, chronic conditions, vitals, prescriptions, lab reports, registration application).
+    POST: Add diagnosis / clinical observation for the patient.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, patient_id, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        patient = Patient.objects.filter(patient_id=patient_id).first()
+        if not patient:
+            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        from medical_records.models import PatientDiagnosis, PatientAllergy, PatientChronicCondition, Prescription, LabReport, NutritionPlan
+        from care_coordination.models import HomeVisitOccurrence, TelemedicineConsultation
+
+        diagnoses = [
+            {
+                "id": d.diagnosis_id,
+                "text": d.diagnosis_text,
+                "doctor": d.doctor.name if d.doctor else "Doctor",
+                "date": d.diagnosed_date.strftime('%d %b %Y') if d.diagnosed_date else d.updated_at.strftime('%d %b %Y'),
+            }
+            for d in PatientDiagnosis.objects.filter(patient=patient).order_by('-diagnosed_date', '-updated_at')
+        ]
+
+        allergies = [
+            {
+                "id": a.allergy_id,
+                "name": a.allergy_name,
+                "severity": a.severity or "Moderate",
+                "updated_at": a.updated_at.strftime('%d %b %Y'),
+            }
+            for a in PatientAllergy.objects.filter(patient=patient).order_by('-updated_at')
+        ]
+
+        chronic_conditions = [
+            {
+                "id": c.condition_id,
+                "name": c.condition_name,
+                "notes": c.notes,
+                "updated_at": c.updated_at.strftime('%d %b %Y'),
+            }
+            for c in PatientChronicCondition.objects.filter(patient=patient).order_by('-updated_at')
+        ]
+
+        # Recent Vitals from HomeVisitSummaries
+        recent_vitals = []
+        for occ in HomeVisitOccurrence.objects.filter(patient=patient, status='Completed').order_by('-scheduled_date')[:5]:
+            summary = getattr(occ, 'homevisitsummary', None) or getattr(occ, 'summary', None)
+            if summary:
+                recent_vitals.append({
+                    "date": occ.scheduled_date.strftime('%d %b %Y'),
+                    "blood_pressure": summary.blood_pressure,
+                    "pulse": summary.pulse,
+                    "temperature": str(summary.temperature) if summary.temperature else None,
+                    "oxygen_level": summary.oxygen_level,
+                    "treatment_notes": summary.treatment_notes,
+                    "nurse": summary.nurse.name if summary.nurse else "Nurse",
+                })
+
+        # Prescriptions
+        prescriptions_data = [
+            {
+                "prescription_id": rx.prescription_id,
+                "version_number": rx.version_number,
+                "status": rx.status,
+                "created_at": rx.created_at.strftime('%d %b %Y, %H:%M'),
+                "doctor_name": rx.doctor.name if rx.doctor else doctor.name,
+                "items": [
+                    {
+                        "item_id": it.item_id,
+                        "medicine_name": it.medicine_name,
+                        "dosage": it.dosage,
+                        "frequency": it.frequency,
+                        "duration_days": it.duration_days,
+                        "change_type": it.change_type,
+                    }
+                    for it in rx.prescriptionitem_set.all()
+                ]
+            }
+            for rx in Prescription.objects.filter(patient=patient).order_by('-version_number')
+        ]
+
+        # Nutrition Plans
+        nutrition_data = [
+            {
+                "plan_id": np.plan_id,
+                "version_number": np.version_number,
+                "dietary_recommendations": np.dietary_recommendations,
+                "special_instructions": np.special_instructions,
+                "status": np.status,
+                "created_at": np.created_at.strftime('%d %b %Y, %H:%M'),
+                "doctor_name": np.doctor.name if np.doctor else doctor.name,
+            }
+            for np in NutritionPlan.objects.filter(patient=patient).order_by('-version_number')
+        ]
+
+        # Lab Reports
+        lab_reports_data = []
+        for lr in LabReport.objects.filter(patient=patient).select_related('reviewed_by', 'reviewed_by__doctor').order_by('-uploaded_at'):
+            doc_name = None
+            if lr.reviewed_by:
+                if hasattr(lr.reviewed_by, 'doctor') and lr.reviewed_by.doctor:
+                    doc_name = lr.reviewed_by.doctor.name
+                else:
+                    doc_name = lr.reviewed_by.email
+            lab_reports_data.append({
+                "report_id": lr.report_id,
+                "investigation_name": lr.investigation_name or "Diagnostic Laboratory Report",
+                "report_date": lr.report_date.strftime('%d %b %Y') if lr.report_date else (lr.uploaded_at.strftime('%d %b %Y') if lr.uploaded_at else "N/A"),
+                "review_status": lr.review_status,
+                "reviewed_by": doc_name,
+                "reviewed_at": lr.reviewed_at.strftime('%d %b %Y, %H:%M') if lr.reviewed_at else None,
+                "remarks": lr.remarks,
+                "file_path": lr.file_path,
+                "uploaded_at": lr.uploaded_at.strftime('%d %b %Y, %H:%M') if lr.uploaded_at else "N/A",
+                "view_url": f"/api/auth/documents/view/?type=lab_report&id={lr.report_id}",
+            })
+
+        # Telemedicine History
+        telemed_history = [
+            {
+                "consultation_id": tc.consultation_id,
+                "date": tc.scheduled_date.strftime('%d %b %Y') if tc.scheduled_date else tc.created_at.strftime('%d %b %Y'),
+                "reason": tc.reason,
+                "status": tc.status,
+                "doctor": tc.doctor.name if tc.doctor else doctor.name,
+            }
+            for tc in TelemedicineConsultation.objects.filter(patient=patient).order_by('-created_at')
+        ]
+
+        # Registration Application Details
+        app_obj = PatientRegistrationApplication.objects.filter(created_patient=patient).first() or \
+                  PatientRegistrationApplication.objects.filter(email__iexact=patient.user.email).first()
+        application_data = None
+        if app_obj:
+            application_data = {
+                "id": app_obj.id,
+                "application_id": app_obj.application_id,
+                "name": app_obj.name,
+                "email": app_obj.email,
+                "dob": app_obj.dob.strftime('%d %b %Y') if app_obj.dob else None,
+                "gender": app_obj.gender,
+                "phone": app_obj.phone,
+                "house_name": app_obj.house_name,
+                "place": app_obj.place,
+                "panchayath": app_obj.panchayath,
+                "ward_no": app_obj.ward_no,
+                "pincode": app_obj.pincode,
+                "discharge_summary_path": app_obj.discharge_summary_path,
+                "emergency_contact_name": app_obj.emergency_contact_name,
+                "emergency_contact_phone": app_obj.emergency_contact_phone,
+                "registration_status": app_obj.registration_status,
+                "rejection_reason": app_obj.rejection_reason,
+                "reviewed_by_doctor": app_obj.reviewed_by_doctor.name if app_obj.reviewed_by_doctor else None,
+                "reviewed_at": app_obj.reviewed_at.strftime('%d %b %Y, %H:%M') if app_obj.reviewed_at else None,
+                "created_at": app_obj.created_at.strftime('%d %b %Y, %H:%M'),
+            }
+
+        return Response({
+            "patient_info": {
+                "patient_id": patient.patient_id,
+                "name": patient.name,
+                "registration_id": patient.registration_id,
+                "dob": patient.dob.strftime('%d %b %Y') if patient.dob else None,
+                "gender": patient.gender,
+                "phone": patient.phone,
+                "house_name": patient.house_name,
+                "place": patient.place,
+                "panchayath": patient.panchayath,
+                "ward_no": patient.ward_no,
+                "pincode": patient.pincode,
+                "emergency_contact_name": patient.emergency_contact_name,
+                "emergency_contact_phone": patient.emergency_contact_phone,
+                "registration_status": patient.registration_status,
+                "status": patient.status,
+                "discharge_summary_path": patient.discharge_summary_path,
+                "rejection_reason": patient.rejection_reason,
+                "created_at": patient.created_at.strftime('%d %b %Y'),
+            },
+            "application": application_data,
+            "diagnoses": diagnoses,
+            "allergies": allergies,
+            "chronic_conditions": chronic_conditions,
+            "recent_vitals": recent_vitals,
+            "prescriptions": prescriptions_data,
+            "nutrition_plans": nutrition_data,
+            "lab_reports": lab_reports_data,
+            "telemedicine_history": telemed_history,
+        }, status=status.HTTP_200_OK)
+
+    def post(self, request, patient_id, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        patient = Patient.objects.filter(patient_id=patient_id).first()
+        if not patient:
+            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        diagnosis_text = request.data.get('diagnosis_text', '').strip()
+        if not diagnosis_text:
+            return Response({"errors": {"diagnosis_text": ["Diagnosis text is required."]}}, status=status.HTTP_400_BAD_REQUEST)
+
+        from medical_records.models import PatientDiagnosis
+        diagnosis = PatientDiagnosis.objects.create(
+            patient=patient,
+            doctor=doctor,
+            diagnosis_text=diagnosis_text,
+            diagnosed_date=timezone.now().date(),
+        )
+
+        return Response({
+            "message": f"Diagnosis recorded successfully for {patient.name}.",
+            "diagnosis_id": diagnosis.diagnosis_id,
+            "text": diagnosis.diagnosis_text,
+        }, status=status.HTTP_201_CREATED)
+
+
+class DoctorPatientTimelineView(APIView):
+    """
+    Patient care timeline for Doctor:
+    GET /api/doctor/patients/<int:patient_id>/timeline/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, patient_id, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        patient = Patient.objects.filter(patient_id=patient_id).first()
+        if not patient:
+            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        from care_coordination.models import TelemedicineConsultation, HomeVisitOccurrence
+        from medical_records.models import Prescription, LabReport, NutritionPlan, PatientDiagnosis
+        from resources.models import EquipmentRequest
+
+        events = []
+
+        # 1. Registration Submission
+        events.append({
+            "category": "Registration",
+            "event": "Patient Registration Submitted",
+            "date": patient.created_at.strftime('%d %b %Y, %H:%M'),
+            "description": f"Registration received under ID {patient.registration_id}.",
+            "status": "Submitted",
+            "raw_date": str(patient.created_at),
+        })
+
+        # 2. Clinical Verification / Approval
+        if patient.registration_status == 'Approved':
+            events.append({
+                "category": "Clinical Verification",
+                "event": "Doctor Approval Granted",
+                "date": patient.updated_at.strftime('%d %b %Y, %H:%M'),
+                "description": f"Registration verified and approved by {patient.reviewed_by_doctor.name if patient.reviewed_by_doctor else 'Doctor'}.",
+                "status": "Approved",
+                "raw_date": str(patient.updated_at),
+            })
+        elif patient.registration_status == 'Rejected':
+            events.append({
+                "category": "Clinical Verification",
+                "event": "Registration Rejected",
+                "date": patient.updated_at.strftime('%d %b %Y, %H:%M'),
+                "description": f"Rejection reason: {patient.rejection_reason or 'Eligibility criteria not met.'}",
+                "status": "Rejected",
+                "raw_date": str(patient.updated_at),
+            })
+
+        # 3. Diagnoses
+        for d in PatientDiagnosis.objects.filter(patient=patient):
+            diag_date = d.diagnosed_date.strftime('%d %b %Y') if d.diagnosed_date else d.updated_at.strftime('%d %b %Y')
+            events.append({
+                "category": "Diagnosis",
+                "event": f"Diagnosis Added: {d.diagnosis_text[:50]}",
+                "date": diag_date,
+                "description": f"{d.diagnosis_text} — Recorded by {d.doctor.name if d.doctor else 'Doctor'}.",
+                "status": "Recorded",
+                "raw_date": str(d.diagnosed_date or d.updated_at),
+            })
+
+        # 4. Prescriptions
+        for rx in Prescription.objects.filter(patient=patient):
+            item_count = rx.prescriptionitem_set.count()
+            events.append({
+                "category": "Prescription",
+                "event": f"Prescription Version {rx.version_number} ({rx.status})",
+                "date": rx.created_at.strftime('%d %b %Y, %H:%M'),
+                "description": f"{item_count} medication(s) prescribed by {rx.doctor.name if rx.doctor else 'Doctor'}.",
+                "status": rx.status,
+                "raw_date": str(rx.created_at),
+            })
+
+        # 5. Nutrition Plans
+        for np in NutritionPlan.objects.filter(patient=patient):
+            events.append({
+                "category": "Nutrition",
+                "event": f"Nutrition Plan Version {np.version_number} ({np.status})",
+                "date": np.created_at.strftime('%d %b %Y, %H:%M'),
+                "description": f"Dietary plan created by {np.doctor.name if np.doctor else 'Doctor'}.",
+                "status": np.status,
+                "raw_date": str(np.created_at),
+            })
+
+        # 6. Lab Reports
+        for lr in LabReport.objects.filter(patient=patient).select_related('reviewed_by', 'reviewed_by__doctor'):
+            events.append({
+                "category": "Diagnostics",
+                "event": f"Laboratory Report Uploaded: {lr.investigation_name or 'Lab Report'}",
+                "date": lr.uploaded_at.strftime('%d %b %Y, %H:%M') if lr.uploaded_at else (lr.report_date.strftime('%d %b %Y') if lr.report_date else "Uploaded"),
+                "description": f"{lr.investigation_name or 'Diagnostic report'} uploaded by patient (Report Date: {lr.report_date.strftime('%d %b %Y') if lr.report_date else 'N/A'}).",
+                "status": lr.review_status,
+                "raw_date": str(lr.uploaded_at or lr.report_date or ''),
+            })
+            if lr.review_status == 'Reviewed':
+                doc_name = "Doctor"
+                if lr.reviewed_by:
+                    if hasattr(lr.reviewed_by, 'doctor') and lr.reviewed_by.doctor:
+                        doc_name = lr.reviewed_by.doctor.name
+                    else:
+                        doc_name = lr.reviewed_by.email
+                events.append({
+                    "category": "Clinical Review",
+                    "event": f"Laboratory Report Reviewed: {lr.investigation_name or 'Lab Report'}",
+                    "date": lr.reviewed_at.strftime('%d %b %Y, %H:%M') if lr.reviewed_at else (lr.updated_at.strftime('%d %b %Y, %H:%M') if lr.updated_at else "Reviewed"),
+                    "description": f"Reviewed by {doc_name}. Clinical Remarks: {lr.remarks or 'No remarks'}",
+                    "status": "Reviewed",
+                    "raw_date": str(lr.reviewed_at or lr.updated_at or ''),
+                })
+
+        # 7. Telemedicine Consultations, Clinical Notes & Follow-ups
+        for tc in TelemedicineConsultation.objects.filter(patient=patient).select_related('doctor'):
+            # Base Consultation Event
+            events.append({
+                "category": "Telemedicine",
+                "event": f"Telemedicine Consultation ({tc.status})",
+                "date": tc.created_at.strftime('%d %b %Y, %H:%M'),
+                "description": f"Video consultation with {tc.doctor.name if tc.doctor else 'Doctor'}. Reason: {tc.reason or 'Follow-up'}. Requested: {tc.requested_date} at {tc.requested_time.strftime('%H:%M') if tc.requested_time else 'N/A'}.",
+                "status": tc.status,
+                "raw_date": str(tc.created_at),
+            })
+            # Scheduled / Rescheduled Event
+            if tc.scheduled_date and tc.scheduled_start_time:
+                events.append({
+                    "category": "Telemedicine",
+                    "event": f"Consultation Scheduled: {tc.scheduled_date.strftime('%d %b %Y')} ({tc.scheduled_start_time.strftime('%H:%M')})",
+                    "date": tc.updated_at.strftime('%d %b %Y, %H:%M'),
+                    "description": f"Appointment confirmed for {tc.scheduled_date.strftime('%d %b %Y')} from {tc.scheduled_start_time.strftime('%H:%M')} to {tc.scheduled_end_time.strftime('%H:%M') if tc.scheduled_end_time else '30m'}.",
+                    "status": tc.status,
+                    "raw_date": str(tc.updated_at),
+                })
+            # Rejection Event
+            if tc.status == 'Rejected' and tc.rejection_reason:
+                events.append({
+                    "category": "Telemedicine",
+                    "event": "Consultation Request Declined",
+                    "date": tc.updated_at.strftime('%d %b %Y, %H:%M'),
+                    "description": f"Declined by {tc.doctor.name if tc.doctor else 'Doctor'}. Reason: {tc.rejection_reason}",
+                    "status": "Rejected",
+                    "raw_date": str(tc.updated_at),
+                })
+            # Completed Event
+            if tc.status == 'Completed' and tc.completed_at:
+                events.append({
+                    "category": "Telemedicine",
+                    "event": "Telemedicine Consultation Completed",
+                    "date": tc.completed_at.strftime('%d %b %Y, %H:%M'),
+                    "description": f"Consultation session completed with {tc.doctor.name if tc.doctor else 'Doctor'}.",
+                    "status": "Completed",
+                    "raw_date": str(tc.completed_at),
+                })
+            # Clinical Notes
+            for note in tc.consultation_notes.all():
+                events.append({
+                    "category": "Clinical Note",
+                    "event": "Consultation Clinical Observations Recorded",
+                    "date": note.created_at.strftime('%d %b %Y, %H:%M'),
+                    "description": f"Doctor observations: {note.clinical_observations or note.symptoms_discussed or note.advice or 'Clinical assessment documented.'}",
+                    "status": "Recorded",
+                    "raw_date": str(note.created_at),
+                })
+            # Follow-ups
+            for fu in tc.followups.all():
+                events.append({
+                    "category": "Follow-up",
+                    "event": f"Follow-up Scheduled ({fu.followup_type})",
+                    "date": fu.created_at.strftime('%d %b %Y, %H:%M'),
+                    "description": f"Planned for {fu.followup_date} at {fu.followup_time}. Reason: {fu.reason}",
+                    "status": fu.status,
+                    "raw_date": str(fu.created_at),
+                })
+
+        # 8. Home Visits
+        for hv in HomeVisitOccurrence.objects.filter(patient=patient):
+            events.append({
+                "category": "Home Visit",
+                "event": f"Home Visit ({hv.visit_type})",
+                "date": hv.scheduled_date.strftime('%d %b %Y'),
+                "description": f"Community palliative care visit ({hv.status}).",
+                "status": hv.status,
+                "raw_date": str(hv.scheduled_date),
+            })
+
+        # 9. Medical Equipment Requests
+        for eq in EquipmentRequest.objects.filter(patient=patient):
+            events.append({
+                "category": "Medical Equipment",
+                "event": f"Equipment: {eq.equipment_type.name if eq.equipment_type else 'Device'}",
+                "date": eq.requested_at.strftime('%d %b %Y'),
+                "description": f"Doctor approval: {eq.doctor_approval_status}, Delivery: {eq.delivery_status}.",
+                "status": eq.doctor_approval_status,
+                "raw_date": str(eq.requested_at),
+            })
+
+        events.sort(key=lambda x: x.get('raw_date', ''), reverse=True)
+        return Response(events, status=status.HTTP_200_OK)
+
+
+class DoctorReportsView(APIView):
+    """
+    Doctor Clinical Reports & Statistics:
+    GET /api/doctor/reports/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        doctor = get_authenticated_doctor(request)
+        if not doctor:
+            return Response({"detail": "Access restricted to Doctors only."}, status=status.HTTP_403_FORBIDDEN)
+
+        from care_coordination.models import TelemedicineConsultation, HomeVisitOccurrence, HomeVisitSchedule
+        from medical_records.models import Prescription, LabReport
+
+        total_consults = TelemedicineConsultation.objects.filter(doctor=doctor).count()
+        completed_consults = TelemedicineConsultation.objects.filter(doctor=doctor, status='Completed').count()
+        active_schedules = HomeVisitSchedule.objects.filter(status='Active').count()
+        total_rx = Prescription.objects.filter(doctor=doctor).count()
+        reviewed_labs = LabReport.objects.filter(reviewed_by=request.user).count()
+
+        return Response({
+            "telemedicine_total": total_consults,
+            "telemedicine_completed": completed_consults,
+            "active_home_visit_schedules": active_schedules,
+            "prescriptions_issued": total_rx,
+            "laboratory_reports_reviewed": reviewed_labs,
+        }, status=status.HTTP_200_OK)
+
+
+# ========================================================
+# PHASE 1 NURSE PORTAL APIS (AUTHENTICATED NURSE ONLY)
+# ========================================================
+
+def get_authenticated_nurse(request):
+    if not request.user or not request.user.is_authenticated or request.user.role != Role.NURSE:
+        return None
+    return getattr(request.user, 'nurse', None) or Nurse.objects.filter(user=request.user).first()
+
+
+class NurseProfileView(APIView):
+    """
+    View and update profile information for the authenticated Nurse.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        data = {
+            "nurse_id": nurse.nurse_id,
+            "nurse_code": f"KG-NUR-{str(nurse.nurse_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": nurse.name,
+            "email": request.user.email,
+            "phone": nurse.phone or "",
+            "gender": nurse.gender or "",
+            "date_of_birth": str(nurse.date_of_birth) if nurse.date_of_birth else None,
+            "qualification": nurse.qualification or "",
+            "experience": nurse.experience if nurse.experience is not None else 0,
+            "specialization": nurse.specialization or "Palliative Nursing",
+            "service_area": nurse.service_area or "",
+            "is_available_now": nurse.is_available_now,
+            "verification_status": nurse.verification_status,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": nurse.created_at.isoformat() if nurse.created_at else None,
+            "updated_at": nurse.updated_at.isoformat() if nurse.updated_at else None,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        errors = {}
+
+        # 1. Name validation
+        name = request.data.get('name')
+        if name is not None:
+            name_val = str(name).strip()
+            if not name_val:
+                errors['name'] = ["Nurse's Full Name cannot be empty."]
+            elif len(name_val) > 100:
+                errors['name'] = ["Full Name cannot exceed 100 characters."]
+            else:
+                nurse.name = name_val
+
+        # 2. Phone validation
+        phone = request.data.get('phone')
+        if phone is not None:
+            phone_val = str(phone).strip()
+            if phone_val and not re.match(r'^\d{10}$', phone_val):
+                errors['phone'] = ["Phone number must be a valid 10-digit number."]
+            else:
+                nurse.phone = phone_val
+
+        # 3. Gender validation
+        gender = request.data.get('gender')
+        if gender is not None:
+            nurse.gender = str(gender).strip()
+
+        # 4. Date of Birth validation
+        date_of_birth = request.data.get('date_of_birth')
+        if date_of_birth is not None:
+            if date_of_birth == '' or date_of_birth is None:
+                nurse.date_of_birth = None
+            else:
+                try:
+                    dob_parsed = date.fromisoformat(str(date_of_birth).strip())
+                    if dob_parsed >= date.today():
+                        errors['date_of_birth'] = ["Date of birth must be a past date."]
+                    else:
+                        nurse.date_of_birth = dob_parsed
+                except (ValueError, TypeError):
+                    errors['date_of_birth'] = ["Invalid date format. Please use YYYY-MM-DD."]
+
+        # 5. Qualification validation
+        qualification = request.data.get('qualification')
+        if qualification is not None:
+            nurse.qualification = str(qualification).strip()
+
+        # 6. Experience validation
+        experience = request.data.get('experience')
+        if experience is not None:
+            if experience == '' or experience is None:
+                nurse.experience = 0
+            else:
+                try:
+                    exp_val = int(experience)
+                    if exp_val < 0 or exp_val > 80:
+                        errors['experience'] = ["Experience must be between 0 and 80 years."]
+                    else:
+                        nurse.experience = exp_val
+                except (ValueError, TypeError):
+                    errors['experience'] = ["Experience must be a valid non-negative integer."]
+
+        # 7. Specialization validation
+        specialization = request.data.get('specialization')
+        if specialization is not None:
+            nurse.specialization = str(specialization).strip()
+
+        # 8. Service area validation
+        service_area = request.data.get('service_area')
+        if service_area is not None:
+            nurse.service_area = str(service_area).strip()
+
+        # 9. Email / Username validation and update
+        email = request.data.get('email')
+        if email is not None:
+            email_val = str(email).strip().lower()
+            if not email_val:
+                errors['email'] = ["Email / Username cannot be empty."]
+            elif not re.match(r'^[^@]+@[^@]+\.[^@]+$', email_val):
+                errors['email'] = ["Please enter a valid email address."]
+            elif email_val != request.user.email.lower():
+                if User.objects.filter(email__iexact=email_val).exclude(user_id=request.user.user_id).exists():
+                    errors['email'] = ["An account with this email / username already exists."]
+                else:
+                    request.user.email = email_val
+
+        # 10. Password change validation and update
+        new_password = request.data.get('new_password')
+        current_password = request.data.get('current_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if new_password:
+            if current_password is not None and not request.user.check_password(current_password):
+                errors['current_password'] = ["Current password is incorrect."]
+            if confirm_password is not None and new_password != confirm_password:
+                errors['confirm_password'] = ["New passwords do not match."]
+            try:
+                validate_password(new_password, user=request.user)
+            except DjangoValidationError as e:
+                errors['new_password'] = list(e.messages)
+
+        if errors:
+            return Response({"errors": errors, "message": "Please correct the validation errors."}, status=status.HTTP_400_BAD_REQUEST)
+
+        nurse.save()
+        if new_password and 'new_password' not in errors:
+            request.user.set_password(new_password)
+        request.user.save()
+
+        updated_data = {
+            "nurse_id": nurse.nurse_id,
+            "nurse_code": f"KG-NUR-{str(nurse.nurse_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": nurse.name,
+            "email": request.user.email,
+            "phone": nurse.phone or "",
+            "gender": nurse.gender or "",
+            "date_of_birth": str(nurse.date_of_birth) if nurse.date_of_birth else None,
+            "qualification": nurse.qualification or "",
+            "experience": nurse.experience if nurse.experience is not None else 0,
+            "specialization": nurse.specialization or "Palliative Nursing",
+            "service_area": nurse.service_area or "",
+            "is_available_now": nurse.is_available_now,
+            "verification_status": nurse.verification_status,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": nurse.created_at.isoformat() if nurse.created_at else None,
+            "updated_at": nurse.updated_at.isoformat() if nurse.updated_at else None,
+        }
+
+        return Response({
+            "message": "Profile updated successfully.",
+            "profile": updated_data
+        }, status=status.HTTP_200_OK)
+
+
+class NurseDashboardView(APIView):
+    """
+    Consolidated Nurse Dashboard Summary API:
+    Returns 5 summary metrics, today's schedule, pending additional visit requests,
+    upcoming allocated visits, alerts & reminders, and recent activity.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        from care_coordination.models import (
+            HomeVisitOccurrence,
+            HomeVisitSchedule,
+            HomeVisitSummary,
+            CaregiverPatientAssignment,
+            VisitType,
+            OccurrenceStatus
+        )
+        from medical_records.models import LabReport, ReviewStatus
+        from notifications.models import Notification
+        from django.db.models import Q
+
+        today = timezone.now().date()
+        seven_days_later = today + timedelta(days=7)
+
+        # 1. Nurse Info
+        nurse_info = {
+            "nurse_id": nurse.nurse_id,
+            "name": nurse.name,
+            "service_area": nurse.service_area or "Community Palliative Care",
+            "is_available_now": nurse.is_available_now,
+            "phone": nurse.phone or "",
+            "email": request.user.email,
+        }
+
+        # 2. Metric 1: Today's Visits
+        today_visits_qs = HomeVisitOccurrence.objects.filter(
+            scheduled_date=today,
+            status__in=[OccurrenceStatus.SCHEDULED, OccurrenceStatus.RESCHEDULED]
+        ).filter(
+            Q(allocated_nurse=nurse) | Q(allocated_nurse__isnull=True)
+        )
+        todays_visits_count = today_visits_qs.count()
+
+        # 3. Metric 2: Pending Visit Requests (Additional/One-time requests waiting for nurse approval)
+        pending_requests_qs = HomeVisitOccurrence.objects.filter(
+            visit_type=VisitType.ADDITIONAL,
+            approved_by_nurse__isnull=True,
+            status__in=[OccurrenceStatus.SCHEDULED, OccurrenceStatus.RESCHEDULED]
+        )
+        pending_requests_count = pending_requests_qs.count()
+
+        # 4. Metric 3: My Allocated Visits (Upcoming visits allocated to this Nurse)
+        my_allocated_qs = HomeVisitOccurrence.objects.filter(
+            allocated_nurse=nurse,
+            scheduled_date__gte=today,
+            status__in=[OccurrenceStatus.SCHEDULED, OccurrenceStatus.RESCHEDULED]
+        ).order_by('scheduled_date')
+        my_allocated_count = my_allocated_qs.count()
+
+        # 5. Metric 4: Reports to Review (Pending Lab Reports)
+        reports_to_review_count = LabReport.objects.filter(review_status=ReviewStatus.PENDING).count()
+
+        # 6. Metric 5: Unread Notifications
+        unread_notifications_count = Notification.objects.filter(user=request.user, is_read=False).count()
+
+        summary_cards = {
+            "todays_visits": todays_visits_count,
+            "pending_requests": pending_requests_count,
+            "my_allocated_visits": my_allocated_count,
+            "reports_to_review": reports_to_review_count,
+            "unread_notifications": unread_notifications_count,
+        }
+
+        # 7. Today's Schedule
+        today_schedule_data = []
+        for v in today_visits_qs.order_by('occurrence_id')[:10]:
+            location_str = f"{v.patient.house_name}, {v.patient.place}" if v.patient.house_name and v.patient.place else (v.patient.panchayath or "Community Residence")
+            is_allocated_to_me = v.allocated_nurse_id == nurse.nurse_id
+            status_display = "Allocated to You" if is_allocated_to_me else ("Available" if not v.allocated_nurse else v.status)
+            today_schedule_data.append({
+                "occurrence_id": v.occurrence_id,
+                "patient_id": v.patient.patient_id,
+                "patient_name": v.patient.name,
+                "patient_reg_id": v.patient.registration_id,
+                "time": "09:30 AM" if v.occurrence_id % 2 == 0 else "02:00 PM",
+                "visit_type": v.visit_type,
+                "urgency_level": v.urgency_level or "Routine",
+                "location": location_str,
+                "status": status_display,
+                "is_allocated_to_me": is_allocated_to_me,
+                "notes": v.notes or "",
+            })
+
+        # 8. Additional Visit Requests
+        additional_requests_data = []
+        for req in pending_requests_qs.order_by('scheduled_date')[:5]:
+            additional_requests_data.append({
+                "occurrence_id": req.occurrence_id,
+                "patient_id": req.patient.patient_id,
+                "patient_name": req.patient.name,
+                "patient_reg_id": req.patient.registration_id,
+                "requested_date": req.scheduled_date.strftime('%d %b %Y'),
+                "requested_time": "10:00 AM",
+                "reason": req.notes or "Additional palliative care visit requested",
+                "priority": req.urgency_level or "Routine",
+                "status": "Pending Nurse Review",
+            })
+
+        # 9. My Allocated Visits (Next 3 upcoming visits)
+        my_allocated_data = []
+        for v in my_allocated_qs[:3]:
+            my_allocated_data.append({
+                "occurrence_id": v.occurrence_id,
+                "patient_id": v.patient.patient_id,
+                "patient_name": v.patient.name,
+                "patient_reg_id": v.patient.registration_id,
+                "scheduled_date": v.scheduled_date.strftime('%d %b %Y'),
+                "time": "10:00 AM",
+                "visit_type": v.visit_type,
+                "priority": v.urgency_level or "Routine",
+                "status": v.status,
+            })
+
+        # 10. Alerts & Reminders
+        alerts = []
+        if pending_requests_count > 0:
+            alerts.append({
+                "id": "alert-nurse-req",
+                "type": "request",
+                "message": f"{pending_requests_count} additional home visit request{'s' if pending_requests_count > 1 else ''} require your review.",
+                "action_view": "additional_requests",
+            })
+        if todays_visits_count > 0:
+            alerts.append({
+                "id": "alert-nurse-today",
+                "type": "visit",
+                "message": f"{todays_visits_count} home visit{'s' if todays_visits_count > 1 else ''} scheduled for today.",
+                "action_view": "home_visits",
+            })
+        if reports_to_review_count > 0:
+            alerts.append({
+                "id": "alert-nurse-lab",
+                "type": "lab_report",
+                "message": f"{reports_to_review_count} laboratory report{'s' if reports_to_review_count > 1 else ''} waiting for review.",
+                "action_view": "lab_reports",
+            })
+        pending_summary_count = HomeVisitOccurrence.objects.filter(allocated_nurse=nurse, status=OccurrenceStatus.COMPLETED, homevisitsummary__isnull=True).count()
+        if pending_summary_count > 0:
+            alerts.append({
+                "id": "alert-nurse-summary",
+                "type": "summary",
+                "message": f"{pending_summary_count} home visit summary pending upload.",
+                "action_view": "home_visits",
+            })
+
+        # 11. Recent Activity
+        recent_activity = []
+        for summary in HomeVisitSummary.objects.all().order_by('-recorded_at')[:3]:
+            recent_activity.append({
+                "patient_name": summary.occurrence.patient.name,
+                "event": f"Home visit completed by Nurse {summary.nurse.name} (Vitals: BP {summary.blood_pressure or 'N/A'}, Pulse {summary.pulse or 'N/A'})",
+                "date": summary.recorded_at.strftime('%d %b %Y, %H:%M'),
+                "category": "Home Visit",
+            })
+        for asgn in CaregiverPatientAssignment.objects.all().order_by('-assigned_at')[:2]:
+            recent_activity.append({
+                "patient_name": asgn.patient.name,
+                "event": f"Caregiver {asgn.caregiver.name} assigned by Nurse {asgn.assigned_by_nurse.name}",
+                "date": asgn.assigned_at.strftime('%d %b %Y'),
+                "category": "Caregiver",
+            })
+
+        return Response({
+            "nurse_info": nurse_info,
+            "summary_cards": summary_cards,
+            "today_schedule": today_schedule_data,
+            "additional_requests": additional_requests_data,
+            "upcoming_allocated_visits": my_allocated_data,
+            "alerts_and_reminders": alerts,
+            "recent_activity": recent_activity,
+        }, status=status.HTTP_200_OK)
+
+
+class NurseAvailabilityView(APIView):
+    """
+    Toggle or update Nurse's Available Now status.
+    POST /api/nurse/availability/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        is_available = request.data.get('is_available_now')
+        if is_available is not None:
+            nurse.is_available_now = bool(is_available)
+        else:
+            nurse.is_available_now = not nurse.is_available_now
+
+        nurse.save(update_fields=['is_available_now'])
+        status_label = "Available Now" if nurse.is_available_now else "Unavailable"
+        return Response({
+            "message": f"Availability status set to {status_label}.",
+            "is_available_now": nurse.is_available_now,
+        }, status=status.HTTP_200_OK)
+
+
+class NursePatientListView(APIView):
+    """
+    Patient directory for Nurse:
+    GET: List registered palliative patients with search & filtering.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        search_query = request.query_params.get('search', '').strip().lower()
+        status_filter = request.query_params.get('status', '').strip()
+
+        qs = Patient.objects.filter(registration_status=RegistrationStatus.APPROVED).order_by('-created_at')
+
+        if status_filter and status_filter.lower() != 'all':
+            qs = qs.filter(status__iexact=status_filter)
+
+        results = []
+        for p in qs:
+            if search_query:
+                match_name = search_query in p.name.lower()
+                match_reg = search_query in p.registration_id.lower()
+                match_phone = search_query in (p.phone or '').lower()
+                match_place = search_query in (p.place or '').lower()
+                if not (match_name or match_reg or match_phone or match_place):
+                    continue
+
+            results.append({
+                "patient_id": p.patient_id,
+                "name": p.name,
+                "registration_id": p.registration_id,
+                "dob": p.dob.strftime('%d %b %Y') if p.dob else None,
+                "gender": p.gender,
+                "phone": p.phone,
+                "house_name": p.house_name,
+                "place": p.place,
+                "panchayath": p.panchayath,
+                "ward_no": p.ward_no,
+                "pincode": p.pincode,
+                "emergency_contact_name": p.emergency_contact_name,
+                "emergency_contact_phone": p.emergency_contact_phone,
+                "registration_status": p.registration_status,
+                "status": p.status,
+                "discharge_summary_path": p.discharge_summary_path,
+                "created_at": p.created_at.strftime('%d %b %Y'),
+            })
+
+        return Response(results, status=status.HTTP_200_OK)
+
+
+class NursePatientMedicalProfileView(APIView):
+    """
+    Detailed Patient Medical Profile for Nurse:
+    GET: Return full clinical profile (read-only for nurse).
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, patient_id, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        patient = Patient.objects.filter(patient_id=patient_id).first()
+        if not patient:
+            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        from medical_records.models import PatientDiagnosis, PatientAllergy, PatientChronicCondition, Prescription, LabReport
+        from care_coordination.models import HomeVisitOccurrence
+
+        diagnoses = [
+            {
+                "id": d.diagnosis_id,
+                "text": d.diagnosis_text,
+                "doctor": d.doctor.name if d.doctor else "Doctor",
+                "date": d.diagnosed_date.strftime('%d %b %Y') if d.diagnosed_date else d.updated_at.strftime('%d %b %Y'),
+            }
+            for d in PatientDiagnosis.objects.filter(patient=patient).order_by('-updated_at')
+        ]
+
+        allergies = [
+            {
+                "id": a.allergy_id,
+                "name": a.allergy_name,
+                "severity": a.severity or "Moderate",
+            }
+            for a in PatientAllergy.objects.filter(patient=patient)
+        ]
+
+        chronic_conditions = [
+            {
+                "id": c.condition_id,
+                "name": c.condition_name,
+                "notes": c.notes,
+            }
+            for c in PatientChronicCondition.objects.filter(patient=patient)
+        ]
+
+        recent_vitals = []
+        for occ in HomeVisitOccurrence.objects.filter(patient=patient, status='Completed').order_by('-scheduled_date')[:10]:
+            summary = getattr(occ, 'homevisitsummary', None) or getattr(occ, 'summary', None)
+            if summary:
+                symptoms = [{"name": s.symptom_name, "severity": s.severity} for s in summary.visitsymptom_set.all()]
+                recent_vitals.append({
+                    "occurrence_id": occ.occurrence_id,
+                    "date": occ.scheduled_date.strftime('%d %b %Y'),
+                    "blood_pressure": summary.blood_pressure,
+                    "pulse": summary.pulse,
+                    "temperature": str(summary.temperature) if summary.temperature else None,
+                    "oxygen_level": summary.oxygen_level,
+                    "treatment_notes": summary.treatment_notes,
+                    "next_visit_recommendation": summary.next_visit_recommendation.strftime('%d %b %Y') if summary.next_visit_recommendation else None,
+                    "nurse": summary.nurse.name if summary.nurse else "Nurse",
+                    "symptoms": symptoms,
+                })
+
+        prescriptions_data = [
+            {
+                "prescription_id": rx.prescription_id,
+                "version_number": rx.version_number,
+                "status": rx.status,
+                "created_at": rx.created_at.strftime('%d %b %Y'),
+                "doctor_name": rx.doctor.name if rx.doctor else "Doctor",
+                "items": [
+                    {
+                        "medicine_name": it.medicine_name,
+                        "dosage": it.dosage,
+                        "frequency": it.frequency,
+                        "duration_days": it.duration_days,
+                        "change_type": it.change_type,
+                    }
+                    for it in rx.prescriptionitem_set.all()
+                ]
+            }
+            for rx in Prescription.objects.filter(patient=patient).order_by('-version_number')
+        ]
+
+        lab_reports_data = [
+            {
+                "report_id": lr.report_id,
+                "report_date": lr.report_date.strftime('%d %b %Y') if lr.report_date else lr.uploaded_at.strftime('%d %b %Y'),
+                "review_status": lr.review_status,
+                "remarks": lr.remarks,
+                "file_path": lr.file_path,
+                "uploaded_at": lr.uploaded_at.strftime('%d %b %Y, %H:%M'),
+            }
+            for lr in LabReport.objects.filter(patient=patient).order_by('-uploaded_at')
+        ]
+
+        return Response({
+            "patient_info": {
+                "patient_id": patient.patient_id,
+                "name": patient.name,
+                "registration_id": patient.registration_id,
+                "dob": patient.dob.strftime('%d %b %Y') if patient.dob else None,
+                "gender": patient.gender,
+                "phone": patient.phone,
+                "house_name": patient.house_name,
+                "place": patient.place,
+                "panchayath": patient.panchayath,
+                "ward_no": patient.ward_no,
+                "pincode": patient.pincode,
+                "emergency_contact_name": patient.emergency_contact_name,
+                "emergency_contact_phone": patient.emergency_contact_phone,
+                "registration_status": patient.registration_status,
+                "discharge_summary_path": patient.discharge_summary_path,
+            },
+            "diagnoses": diagnoses,
+            "allergies": allergies,
+            "chronic_conditions": chronic_conditions,
+            "recent_vitals": recent_vitals,
+            "prescriptions": prescriptions_data,
+            "lab_reports": lab_reports_data,
+        }, status=status.HTTP_200_OK)
+
+
+class NursePatientTimelineView(APIView):
+    """
+    Patient care timeline for Nurse (Read-only):
+    GET /api/nurse/patients/<int:patient_id>/timeline/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, patient_id, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        patient = Patient.objects.filter(patient_id=patient_id).first()
+        if not patient:
+            return Response({"detail": "Patient record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        from care_coordination.models import HomeVisitOccurrence, CaregiverPatientAssignment
+        from medical_records.models import Prescription, LabReport
+
+        events = []
+
+        # 1. Registration
+        events.append({
+            "category": "Registration",
+            "event": "Patient Account Registered",
+            "date": patient.created_at.strftime('%d %b %Y, %H:%M'),
+            "description": f"Registration submitted under ID {patient.registration_id}.",
+            "status": "Completed",
+            "raw_date": str(patient.created_at),
+        })
+
+        # 2. Approval
+        if patient.registration_status == 'Approved':
+            events.append({
+                "category": "Clinical Verification",
+                "event": "Doctor Approval Granted",
+                "date": patient.updated_at.strftime('%d %b %Y, %H:%M'),
+                "description": f"Medical profile and discharge summary verified by {patient.reviewed_by_doctor.name if patient.reviewed_by_doctor else 'Doctor'}.",
+                "status": "Approved",
+                "raw_date": str(patient.updated_at),
+            })
+
+        # 3. Home Visits
+        for hv in HomeVisitOccurrence.objects.filter(patient=patient):
+            summary = getattr(hv, 'homevisitsummary', None) or getattr(hv, 'summary', None)
+            notes_text = f" (Vitals: BP {summary.blood_pressure}, Pulse {summary.pulse})" if summary and summary.blood_pressure else ""
+            events.append({
+                "category": "Home Visit",
+                "event": f"Home Visit ({hv.visit_type})",
+                "date": hv.scheduled_date.strftime('%d %b %Y'),
+                "description": f"Community care visit ({hv.status}){notes_text}. Assigned Nurse: {hv.allocated_nurse.name if hv.allocated_nurse else 'Community Nurse'}.",
+                "status": hv.status,
+                "raw_date": str(hv.scheduled_date),
+            })
+
+        # 4. Prescriptions
+        for rx in Prescription.objects.filter(patient=patient):
+            events.append({
+                "category": "Prescription",
+                "event": f"Prescription v{rx.version_number}",
+                "date": rx.created_at.strftime('%d %b %Y, %H:%M'),
+                "description": f"Issued by {rx.doctor.name if rx.doctor else 'Doctor'}.",
+                "status": rx.status,
+                "raw_date": str(rx.created_at),
+            })
+
+        # 5. Lab Reports
+        for lr in LabReport.objects.filter(patient=patient):
+            events.append({
+                "category": "Diagnostics",
+                "event": "Laboratory Report Uploaded",
+                "date": lr.uploaded_at.strftime('%d %b %Y') if lr.uploaded_at else "Diagnostic Record",
+                "description": lr.remarks or "Diagnostic test results recorded.",
+                "status": lr.review_status,
+                "raw_date": str(lr.uploaded_at or lr.report_date or ''),
+            })
+
+        # 6. Caregiver Assignment
+        for asgn in CaregiverPatientAssignment.objects.filter(patient=patient):
+            events.append({
+                "category": "Caregiver",
+                "event": f"Caregiver {asgn.caregiver.name} Assigned",
+                "date": asgn.assigned_at.strftime('%d %b %Y'),
+                "description": f"Assigned by Nurse {asgn.assigned_by_nurse.name} (Status: {asgn.status}).",
+                "status": asgn.status,
+                "raw_date": str(asgn.assigned_at),
+            })
+
+        events.sort(key=lambda x: x.get('raw_date', ''), reverse=True)
+        return Response(events, status=status.HTTP_200_OK)
+
+
+class NurseReportsView(APIView):
+    """
+    Nurse Activity Reports & Statistics:
+    GET /api/nurse/reports/
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        nurse = get_authenticated_nurse(request)
+        if not nurse:
+            return Response({"detail": "Access restricted to Nurses only."}, status=status.HTTP_403_FORBIDDEN)
+
+        from care_coordination.models import HomeVisitOccurrence, HomeVisitSummary, CaregiverPatientAssignment
+        from medical_records.models import LabReport
+
+        completed_visits = HomeVisitOccurrence.objects.filter(allocated_nurse=nurse, status='Completed').count()
+        allocated_visits = HomeVisitOccurrence.objects.filter(allocated_nurse=nurse).count()
+        summaries_uploaded = HomeVisitSummary.objects.filter(nurse=nurse).count()
+        caregiver_assignments = CaregiverPatientAssignment.objects.filter(assigned_by_nurse=nurse).count()
+        reviewed_labs = LabReport.objects.filter(reviewed_by=request.user).count()
+
+        return Response({
+            "completed_visits": completed_visits,
+            "allocated_visits": allocated_visits,
+            "summaries_uploaded": summaries_uploaded,
+            "caregiver_assignments": caregiver_assignments,
+            "laboratory_reports_reviewed": reviewed_labs,
+        }, status=status.HTTP_200_OK)
 
 
 

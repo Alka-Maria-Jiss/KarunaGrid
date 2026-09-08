@@ -7,11 +7,13 @@ import {
   AlertCircle,
   Upload,
   Check,
-  Eye,
-  EyeOff,
   ArrowLeft,
   ArrowRight,
-  UserPlus
+  UserPlus,
+  Copy,
+  Clock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
@@ -39,6 +41,7 @@ export default function RegisterPage({ onNavigate }) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [dob, setDob] = useState('');
+  const [gender, setGender] = useState('Male');
   const [emergencyContactName, setEmergencyContactName] = useState('');
   const [emergencyContactPhone, setEmergencyContactPhone] = useState('');
 
@@ -63,6 +66,8 @@ export default function RegisterPage({ onNavigate }) {
   const [bannerMessage, setBannerMessage] = useState(null);
   const [bannerType, setBannerType] = useState('error');
   const [isSuccess, setIsSuccess] = useState(false);
+  const [registeredAppId, setRegisteredAppId] = useState('');
+  const [copiedAppId, setCopiedAppId] = useState(false);
 
   const { showSuccess, showError } = useToast();
 
@@ -103,6 +108,10 @@ export default function RegisterPage({ onNavigate }) {
         if (dobDate >= today) {
           errors.dob = ['Date of birth must be a past date.'];
         }
+      }
+
+      if (!gender) {
+        errors.gender = ['Gender is required.'];
       }
 
       if (emergencyContactPhone.trim() && !/^\d{10}$/.test(emergencyContactPhone.trim())) {
@@ -215,6 +224,7 @@ export default function RegisterPage({ onNavigate }) {
 
     if (selectedRole === 'patient') {
       formData.append('dob', dob);
+      if (gender) formData.append('gender', gender);
       if (dischargeSummaryFile) {
         formData.append('discharge_summary', dischargeSummaryFile);
       }
@@ -234,10 +244,13 @@ export default function RegisterPage({ onNavigate }) {
       const res = await apiClient.post('/auth/register/', formData);
       setIsSuccess(true);
       setBannerType('success');
+      if (res.application_id) {
+        setRegisteredAppId(res.application_id);
+      }
       const defaultSuccessMessage =
         selectedRole === 'patient'
-          ? 'Your registration is pending doctor approval. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.'
-          : 'Your registration is pending administrator verification. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.';
+          ? 'Your registration is pending doctor approval. Please save your Application ID to track the review status.'
+          : 'Your registration is pending administrator verification. You will receive notification once your registration has been approved.';
       setBannerMessage(res.message || defaultSuccessMessage);
       showSuccess('Registration submitted successfully!');
     } catch (err) {
@@ -253,6 +266,7 @@ export default function RegisterPage({ onNavigate }) {
           'confirm_password',
           'phone',
           'dob',
+          'gender',
           'emergency_contact_name',
           'emergency_contact_phone'
         ];
@@ -286,26 +300,6 @@ export default function RegisterPage({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-serene-bg flex flex-col justify-between p-4 sm:p-6 md:p-8 selection:bg-serene-primary-container selection:text-serene-text">
-      {/* Top Header */}
-      <header className="max-w-5xl mx-auto w-full flex items-center justify-between py-2">
-        <button
-          type="button"
-          onClick={() => handleNavigate('/')}
-          className="flex items-center gap-3 font-extrabold text-lg text-serene-text hover:text-serene-primary transition-colors"
-        >
-          <img src={logoImg} alt="KarunaGrid Official Logo" className="w-10 h-10 object-contain rounded-full shadow-sm" />
-          <span>KarunaGrid Care Network</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleNavigate('/login')}
-          className="text-xs sm:text-sm font-bold text-serene-primary hover:underline px-3 py-1.5 rounded-xl bg-serene-container border border-serene-outline-subtle transition-all"
-        >
-          Sign In
-        </button>
-      </header>
-
       {/* Main Container */}
       <main className="flex-1 flex items-center justify-center my-6">
         <motion.div
@@ -319,8 +313,9 @@ export default function RegisterPage({ onNavigate }) {
             <span className="serene-tag text-xs font-bold px-3 py-1 bg-serene-container text-serene-primary border border-serene-outline-subtle inline-block mb-1">
               Account Registration
             </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-serene-text tracking-tight">
-              Join KarunaGrid Network
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-serene-text tracking-tight flex items-center justify-center gap-3">
+              <img src={logoImg} alt="KarunaGrid Logo" className="w-8 h-8 sm:w-9 sm:h-9 object-contain rounded-full shadow-xs" />
+              <span>KarunaGrid Care Network</span>
             </h1>
             <p className="text-xs sm:text-sm text-serene-muted font-medium">
               Create your account in 4 simple steps.
@@ -347,21 +342,69 @@ export default function RegisterPage({ onNavigate }) {
 
           {/* SUCCESS SCREEN */}
           {isSuccess ? (
-            <div className="text-center space-y-4 py-6">
-              <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
-              <h2 className="text-xl font-extrabold text-serene-text">Registration Submitted!</h2>
-              <p className="text-xs sm:text-sm text-serene-muted max-w-md mx-auto leading-relaxed font-medium">
-                {selectedRole === 'patient'
-                  ? 'Your registration is pending doctor approval. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.'
-                  : 'Your registration is pending administrator verification. You will receive an email once your registration has been approved. After approval, you can log in using the email and password you provided.'}
-              </p>
-              <button
-                type="button"
-                onClick={() => handleNavigate('/login')}
-                className="py-3 px-6 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all inline-flex items-center gap-2"
-              >
-                <span>Go to Portal Login</span>
-              </button>
+            <div className="text-center space-y-5 py-4 animate-in fade-in duration-200">
+              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto shadow-xs border-2 border-emerald-200">
+                <CheckCircle2 className="w-9 h-9" />
+              </div>
+              
+              <div className="space-y-1">
+                <h2 className="text-2xl font-black text-[#1e1b14]">Registration Submitted!</h2>
+                <p className="text-xs text-[#7b776c] font-medium">
+                  {selectedRole === 'patient'
+                    ? 'Your patient registration application has been submitted and is pending Doctor review.'
+                    : 'Your caregiver application has been submitted and is pending Administrator verification.'}
+                </p>
+              </div>
+
+              {/* Prominent Application ID Box (for Patients) */}
+              {selectedRole === 'patient' && registeredAppId && (
+                <div className="p-4 rounded-2xl bg-[#fffbf0] border border-[#fae6b8] space-y-2 text-left">
+                  <p className="text-[10px] font-extrabold uppercase text-[#915e09] tracking-wider">
+                    Your Application ID:
+                  </p>
+                  <div className="flex items-center justify-between gap-3 bg-white p-3 rounded-xl border border-[#e8d5b0]">
+                    <span className="font-mono font-black text-base text-[#1e1b14] tracking-wide">
+                      {registeredAppId}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(registeredAppId);
+                        setCopiedAppId(true);
+                        setTimeout(() => setCopiedAppId(false), 2000);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold bg-[#faecd0] hover:bg-[#f5e3c0] text-[#915e09] transition-colors cursor-pointer"
+                    >
+                      {copiedAppId ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedAppId ? 'Copied!' : 'Copy ID'}</span>
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-[#7b776c] leading-relaxed">
+                    Please save your Application ID. You can use it together with your email address to check your application status at any time.
+                  </p>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                {selectedRole === 'patient' && (
+                  <button
+                    type="button"
+                    onClick={() => handleNavigate('/check-application-status')}
+                    className="w-full sm:w-auto py-2.5 px-5 text-xs sm:text-sm font-extrabold text-[#645e45] bg-[#f4ede0] hover:bg-[#ede3d0] rounded-xl border border-[#e0d9cc] transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Clock className="w-4 h-4" />
+                    <span>Check Application Status</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('/login')}
+                  className="w-full sm:w-auto py-2.5 px-6 text-xs sm:text-sm font-extrabold text-white bg-[#645e45] hover:bg-[#4c472f] rounded-xl shadow-sm hover:shadow-md transition-all inline-flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Go to Portal Login</span>
+                </button>
+              </div>
             </div>
           ) : (
             <>
@@ -438,9 +481,6 @@ export default function RegisterPage({ onNavigate }) {
                         </div>
                         <div>
                           <h3 className="font-extrabold text-serene-text text-base">Patient Portal</h3>
-                          <p className="text-xs text-serene-muted mt-0.5 font-medium">
-                            Register for home care services & medical tracking.
-                          </p>
                         </div>
                       </div>
 
@@ -464,9 +504,6 @@ export default function RegisterPage({ onNavigate }) {
                         </div>
                         <div>
                           <h3 className="font-extrabold text-serene-text text-base">Caregiver Portal</h3>
-                          <p className="text-xs text-serene-muted mt-0.5 font-medium">
-                            Register as a certified caregiver for network tasks.
-                          </p>
                         </div>
                       </div>
                     </div>
@@ -627,24 +664,49 @@ export default function RegisterPage({ onNavigate }) {
                     {/* Patient Specific Fields */}
                     {selectedRole === 'patient' && (
                       <div className="space-y-4 pt-2 border-t border-serene-outline-subtle/60">
-                        <div>
-                          <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-                            Date of Birth <span className="text-rose-500">*</span>
-                          </label>
-                          <input
-                            type="date"
-                            required
-                            value={dob}
-                            onChange={(e) => setDob(e.target.value)}
-                            className={`w-full px-3.5 py-2.5 rounded-xl border text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
-                              fieldErrors.dob
-                                ? 'border-rose-400 focus:ring-rose-200'
-                                : 'border-serene-outline-subtle focus:border-serene-primary'
-                            }`}
-                          />
-                          {fieldErrors.dob && (
-                            <p className="text-rose-600 text-xs mt-1 font-semibold">{fieldErrors.dob[0]}</p>
-                          )}
+                        {/* Date of Birth & Gender */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
+                              Date of Birth <span className="text-rose-500">*</span>
+                            </label>
+                            <input
+                              type="date"
+                              required
+                              value={dob}
+                              onChange={(e) => setDob(e.target.value)}
+                              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
+                                fieldErrors.dob
+                                  ? 'border-rose-400 focus:ring-rose-200'
+                                  : 'border-serene-outline-subtle focus:border-serene-primary'
+                              }`}
+                            />
+                            {fieldErrors.dob && (
+                              <p className="text-rose-600 text-xs mt-1 font-semibold">{fieldErrors.dob[0]}</p>
+                            )}
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
+                              Gender <span className="text-rose-500">*</span>
+                            </label>
+                            <select
+                              required
+                              value={gender}
+                              onChange={(e) => setGender(e.target.value)}
+                              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
+                                fieldErrors.gender
+                                  ? 'border-rose-400 focus:ring-rose-200'
+                                  : 'border-serene-outline-subtle focus:border-serene-primary'
+                              }`}
+                            >
+                              <option value="Male">Male</option>
+                              <option value="Female">Female</option>
+                            </select>
+                            {fieldErrors.gender && (
+                              <p className="text-rose-600 text-xs mt-1 font-semibold">{fieldErrors.gender[0]}</p>
+                            )}
+                          </div>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1017,15 +1079,25 @@ export default function RegisterPage({ onNavigate }) {
           )}
 
           {/* Footer Link */}
-          <div className="pt-4 border-t border-serene-outline-subtle/60 text-center">
-            <p className="text-xs text-serene-muted font-medium">
-              Already have an account?{' '}
+          <div className="pt-4 border-t border-serene-outline-subtle/60 text-center space-y-1.5">
+            <p className="text-xs sm:text-sm text-serene-muted font-medium">
+              Already have an approved account?{' '}
               <button
                 type="button"
                 onClick={() => handleNavigate('/login')}
-                className="font-bold text-serene-primary hover:underline"
+                className="font-extrabold text-serene-primary hover:underline ml-1"
               >
                 Sign In
+              </button>
+            </p>
+            <p className="text-xs text-[#7b776c]">
+              Waiting for Doctor review?{' '}
+              <button
+                type="button"
+                onClick={() => handleNavigate('/check-application-status')}
+                className="font-extrabold text-[#645e45] hover:underline ml-1"
+              >
+                Check Application Status
               </button>
             </p>
           </div>

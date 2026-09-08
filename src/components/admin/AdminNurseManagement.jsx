@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Activity, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, X } from 'lucide-react';
+import { Activity, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, EyeOff, X, AlertCircle } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -14,9 +14,8 @@ export default function AdminNurseManagement({
   // Form State for Add Nurse
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [serviceArea, setServiceArea] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
@@ -52,8 +51,6 @@ export default function AdminNurseManagement({
       const payload = {
         name: name.trim(),
         email: email.trim(),
-        phone: phone.trim(),
-        service_area: serviceArea.trim(),
         password,
       };
 
@@ -63,8 +60,6 @@ export default function AdminNurseManagement({
       // Reset form
       setName('');
       setEmail('');
-      setPhone('');
-      setServiceArea('');
       setPassword('');
       setShowAddModal(false);
 
@@ -232,8 +227,15 @@ export default function AdminNurseManagement({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="sm:col-span-2">
+            {fieldErrors.detail && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{Array.isArray(fieldErrors.detail) ? fieldErrors.detail[0] : fieldErrors.detail}</span>
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <div>
                 <label className="block font-extrabold text-[#1e1b14] mb-1">
                   Full Name <span className="text-rose-500">*</span>
                 </label>
@@ -250,64 +252,52 @@ export default function AdminNurseManagement({
                 )}
               </div>
 
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Email Address <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="nurse@karunagrid.org"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
-                {fieldErrors.email && (
-                  <p className="text-rose-600 font-semibold mt-0.5">{fieldErrors.email[0]}</p>
-                )}
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-extrabold text-[#1e1b14] mb-1">
+                    Email Address <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="nurse@karunagrid.org"
+                    className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
+                  />
+                  {fieldErrors.email && (
+                    <p className="text-rose-600 font-semibold mt-0.5">{fieldErrors.email[0]}</p>
+                  )}
+                </div>
 
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Phone Number (10 digits) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                  placeholder="9876543210"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Service Area / Panchayath <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={serviceArea}
-                  onChange={(e) => setServiceArea(e.target.value)}
-                  placeholder="e.g. Aluva East Panchayath"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Initial Password <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
+                <div>
+                  <label className="block font-extrabold text-[#1e1b14] mb-1">
+                    Initial Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={8}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min. 8 characters"
+                      className={`w-full px-3 py-2 pr-9 bg-[#fdfbf7] border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45] ${
+                        fieldErrors.password ? 'border-rose-400' : 'border-[#e0d9cc]'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7b776c] hover:text-[#1e1b14] p-0.5 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  {fieldErrors.password && (
+                    <p className="text-rose-600 font-semibold mt-0.5">{fieldErrors.password[0]}</p>
+                  )}
+                </div>
               </div>
             </div>
 

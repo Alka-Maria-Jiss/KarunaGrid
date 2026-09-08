@@ -27,6 +27,7 @@ import { AlertCircle, Clock, CheckCircle2 } from 'lucide-react';
 
 export default function PatientDashboard({ user, onLogout }) {
   const [currentView, setCurrentView] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState(user);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -138,7 +139,11 @@ export default function PatientDashboard({ user, onLogout }) {
       case 'profile':
         return (
           <PatientProfileView
-            profile={patientInfo}
+            user={currentUser || user}
+            onUpdateUser={(updated) => {
+              setCurrentUser(updated);
+              fetchPatientData();
+            }}
             onRefresh={fetchPatientData}
           />
         );
@@ -154,6 +159,7 @@ export default function PatientDashboard({ user, onLogout }) {
         return (
           <PatientLabReportsView
             reports={labReports}
+            onRefresh={fetchPatientData}
           />
         );
 

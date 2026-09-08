@@ -81,6 +81,10 @@ class Administrator(models.Model):
     user = models.OneToOneField('accounts.User', on_delete=models.CASCADE, db_column='user_id')
     name = models.CharField(max_length=100)
     phone = models.CharField(max_length=15, null=True, blank=True)
+    gender = models.CharField(max_length=20, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    qualification = models.CharField(max_length=150, null=True, blank=True)
+    experience = models.PositiveIntegerField(null=True, blank=True, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -95,14 +99,13 @@ class Doctor(models.Model):
     doctor_id = models.AutoField(primary_key=True)
     user = models.OneToOneField('accounts.User', on_delete=models.CASCADE, db_column='user_id')
     name = models.CharField(max_length=100)
+    gender = models.CharField(max_length=20, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    qualification = models.CharField(max_length=150, null=True, blank=True)
+    experience = models.PositiveIntegerField(null=True, blank=True, default=0)
     specialization = models.CharField(max_length=100, null=True, blank=True)
     service_area = models.CharField(max_length=100, null=True, blank=True)
     phone = models.CharField(max_length=15, null=True, blank=True)
-    house_name = models.CharField(max_length=50, default='N/A')
-    place = models.CharField(max_length=50, default='N/A')
-    panchayath = models.CharField(max_length=50, default='N/A')
-    ward_no = models.IntegerField(default=1)
-    pincode = models.CharField(max_length=50, default='N/A')
     is_available_now = models.BooleanField(default=False)
     verification_status = models.CharField(
         max_length=20, choices=VerificationStatus.choices, default=VerificationStatus.PENDING
@@ -125,13 +128,13 @@ class Nurse(models.Model):
     nurse_id = models.AutoField(primary_key=True)
     user = models.OneToOneField('accounts.User', on_delete=models.CASCADE, db_column='user_id')
     name = models.CharField(max_length=100)
+    gender = models.CharField(max_length=20, null=True, blank=True)
+    date_of_birth = models.DateField(null=True, blank=True)
+    qualification = models.CharField(max_length=150, null=True, blank=True)
+    experience = models.PositiveIntegerField(null=True, blank=True, default=0)
+    specialization = models.CharField(max_length=100, null=True, blank=True)
     service_area = models.CharField(max_length=100, null=True, blank=True)
     phone = models.CharField(max_length=15, null=True, blank=True)
-    house_name = models.CharField(max_length=50, default='N/A')
-    place = models.CharField(max_length=50, default='N/A')
-    panchayath = models.CharField(max_length=50, default='N/A')
-    ward_no = models.IntegerField(default=1)
-    pincode = models.CharField(max_length=50, default='N/A')
     is_available_now = models.BooleanField(default=False)
     verification_status = models.CharField(
         max_length=20, choices=VerificationStatus.choices, default=VerificationStatus.PENDING
@@ -184,6 +187,44 @@ class Patient(models.Model):
 
     def __str__(self):
         return f"Patient: {self.name} ({self.registration_id})"
+
+
+class PatientRegistrationApplication(models.Model):
+    application_id = models.CharField(max_length=30, unique=True, db_index=True)
+    name = models.CharField(max_length=100)
+    email = models.EmailField(max_length=150)  # Non-unique to allow rejected applicants to reapply
+    password_hash = models.CharField(max_length=128, null=True, blank=True)  # Cleared after approval/rejection
+    dob = models.DateField()
+    gender = models.CharField(max_length=20, blank=True, default='')
+    phone = models.CharField(max_length=15)
+    house_name = models.CharField(max_length=50, default='N/A')
+    place = models.CharField(max_length=50, default='N/A')
+    panchayath = models.CharField(max_length=50, default='N/A')
+    ward_no = models.IntegerField(default=1)
+    pincode = models.CharField(max_length=50, default='N/A')
+    discharge_summary_path = models.CharField(max_length=255)
+    emergency_contact_name = models.CharField(max_length=100, null=True, blank=True)
+    emergency_contact_phone = models.CharField(max_length=15, null=True, blank=True)
+    registration_status = models.CharField(
+        max_length=20, choices=RegistrationStatus.choices, default=RegistrationStatus.PENDING
+    )
+    rejection_reason = models.TextField(null=True, blank=True)
+    reviewed_by_doctor = models.ForeignKey(
+        'accounts.Doctor', on_delete=models.SET_NULL, null=True, blank=True, db_column='reviewed_by_doctor_id'
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_patient = models.ForeignKey(
+        'accounts.Patient', on_delete=models.SET_NULL, null=True, blank=True, related_name='registration_applications'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'patient_registration_applications'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Application {self.application_id}: {self.name} ({self.registration_status})"
 
 
 class Caregiver(models.Model):

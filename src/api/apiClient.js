@@ -36,9 +36,22 @@ function sanitizeError(error, responseData = null, status = null) {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_info');
-    const msg = responseData?.detail || (responseData?.non_field_errors ? responseData.non_field_errors[0] : 'Your session has expired. Please log in again.');
+    
+    // Redirect to login if unauthenticated on a protected route
+    if (
+      typeof window !== 'undefined' &&
+      !window.location.pathname.includes('/login') &&
+      !window.location.pathname.includes('/register') &&
+      !window.location.pathname.includes('/check-application-status') &&
+      !window.location.pathname.includes('/application-status')
+    ) {
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 100);
+    }
+
     return new ApiClientError(
-      msg,
+      'Your session has expired. Please sign in again.',
       401,
       responseData
     );

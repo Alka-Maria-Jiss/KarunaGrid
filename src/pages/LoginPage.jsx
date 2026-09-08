@@ -77,26 +77,6 @@ export default function LoginPage({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-serene-bg flex flex-col justify-between p-4 sm:p-6 md:p-8 selection:bg-serene-primary-container selection:text-serene-text">
-      {/* Top Header */}
-      <header className="max-w-5xl mx-auto w-full flex items-center justify-between py-2">
-        <button
-          type="button"
-          onClick={() => handleNavigate('/')}
-          className="flex items-center gap-3 font-extrabold text-lg text-serene-text hover:text-serene-primary transition-colors"
-        >
-          <img src={logoImg} alt="KarunaGrid Official Logo" className="w-10 h-10 object-contain rounded-full shadow-sm" />
-          <span>KarunaGrid Care Network</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleNavigate('/register')}
-          className="text-xs sm:text-sm font-bold text-serene-primary hover:underline px-3 py-1.5 rounded-xl bg-serene-container border border-serene-outline-subtle transition-all"
-        >
-          Register Account
-        </button>
-      </header>
-
       {/* Main Form Container */}
       <main className="flex-1 flex items-center justify-center my-8">
         <motion.div
@@ -110,8 +90,9 @@ export default function LoginPage({ onNavigate }) {
             <span className="serene-tag text-xs font-bold px-3 py-1 bg-serene-container text-serene-primary border border-serene-outline-subtle inline-block mb-1">
               Portal Access
             </span>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-serene-text tracking-tight">
-              Sign In to KarunaGrid
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-serene-text tracking-tight flex items-center justify-center gap-2.5">
+              <img src={logoImg} alt="KarunaGrid Logo" className="w-8 h-8 sm:w-9 sm:h-9 object-contain rounded-full shadow-xs" />
+              <span>Sign In to KarunaGrid</span>
             </h1>
             <p className="text-xs sm:text-sm text-serene-muted font-medium">
               Enter your credentials to access your care dashboard.
@@ -225,15 +206,25 @@ export default function LoginPage({ onNavigate }) {
           </form>
 
           {/* Footer Link */}
-          <div className="pt-4 border-t border-serene-outline-subtle/60 text-center">
-            <p className="text-xs text-serene-muted font-medium">
+          <div className="pt-4 border-t border-serene-outline-subtle/60 text-center space-y-1.5">
+            <p className="text-xs sm:text-sm text-serene-muted font-medium">
               Don't have an account yet?{' '}
               <button
                 type="button"
                 onClick={() => handleNavigate('/register')}
-                className="font-bold text-serene-primary hover:underline"
+                className="font-extrabold text-serene-primary hover:underline ml-1"
               >
                 Register Account
+              </button>
+            </p>
+            <p className="text-xs text-[#7b776c]">
+              Waiting for Doctor review?{' '}
+              <button
+                type="button"
+                onClick={() => handleNavigate('/check-application-status')}
+                className="font-extrabold text-[#645e45] hover:underline ml-1"
+              >
+                Check Application Status
               </button>
             </p>
           </div>

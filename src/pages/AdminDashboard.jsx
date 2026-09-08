@@ -17,6 +17,7 @@ import AdminEquipmentManagement from '../components/admin/AdminEquipmentManageme
 import AdminNotifications from '../components/admin/AdminNotifications';
 import AdminReportsAnalytics from '../components/admin/AdminReportsAnalytics';
 import AdminSystemMonitoring from '../components/admin/AdminSystemMonitoring';
+import AdminProfileView from '../components/admin/AdminProfileView';
 import CaregiverDetailModal from '../components/admin/CaregiverDetailModal';
 
 import apiClient from '../api/apiClient';
@@ -24,6 +25,7 @@ import { useToast } from '../context/ToastContext';
 
 export default function AdminDashboard({ user, onLogout }) {
   const [currentView, setCurrentView] = useState('dashboard');
+  const [currentUser, setCurrentUser] = useState(user);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -141,16 +143,19 @@ export default function AdminDashboard({ user, onLogout }) {
   };
 
   // Extract filtered lists for Doctors, Nurses, and Caregivers
-  const doctorsList = users.filter((u) => u.role?.toLowerCase() === 'doctor');
-  const nursesList = users.filter((u) => u.role?.toLowerCase() === 'nurse');
-  const caregiversList = users.filter((u) => u.role?.toLowerCase() === 'caregiver');
+  const safeUsers = Array.isArray(users) ? users : [];
+  const doctorsList = safeUsers.filter((u) => u.role?.toLowerCase() === 'doctor');
+  const nursesList = safeUsers.filter((u) => u.role?.toLowerCase() === 'nurse');
+  const caregiversList = safeUsers.filter((u) => u.role?.toLowerCase() === 'caregiver');
 
-  const pendingWelfareCount = welfareApps.filter(
-    (a) => a.status === 'Submitted' || a.status === 'UnderReview'
+  const safeWelfareApps = Array.isArray(welfareApps) ? welfareApps : [];
+  const pendingWelfareCount = safeWelfareApps.filter(
+    (a) => a && (a.status === 'Submitted' || a.status === 'UnderReview')
   ).length;
 
+  const safePendingCaregivers = Array.isArray(pendingCaregivers) ? pendingCaregivers : [];
   const pendingCounts = {
-    caregivers: pendingCaregivers.length,
+    caregivers: safePendingCaregivers.length,
     welfare: pendingWelfareCount,
   };
 
@@ -245,6 +250,17 @@ export default function AdminDashboard({ user, onLogout }) {
       case 'system_monitoring':
         return <AdminSystemMonitoring stats={stats} activities={activities} />;
 
+      case 'profile':
+        return (
+          <AdminProfileView
+            user={currentUser || user}
+            onUpdateUser={(updated) => {
+              setCurrentUser(updated);
+              fetchDashboardData();
+            }}
+          />
+        );
+
       case 'activity_logs':
         return (
           <div className="space-y-5">
@@ -320,10 +336,11 @@ export default function AdminDashboard({ user, onLogout }) {
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Header */}
         <AdminHeader
-          user={user}
+          user={currentUser || user}
           currentView={currentView}
           onOpenMobile={() => setIsMobileSidebarOpen(true)}
           onLogout={onLogout}
+          onNavigateView={setCurrentView}
           pendingAlertCount={pendingCaregivers.length + pendingWelfareCount}
         />
 

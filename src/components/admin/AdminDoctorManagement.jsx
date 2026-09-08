@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Stethoscope, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, X, CheckCircle2 } from 'lucide-react';
+import { Stethoscope, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, EyeOff, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -13,11 +13,9 @@ export default function AdminDoctorManagement({
 
   // Form State for Add Doctor
   const [name, setName] = useState('');
-  const [specialization, setSpecialization] = useState('');
   const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
-  const [serviceArea, setServiceArea] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fieldErrors, setFieldErrors] = useState({});
 
@@ -52,10 +50,7 @@ export default function AdminDoctorManagement({
     try {
       const payload = {
         name: name.trim(),
-        specialization: specialization.trim() || 'Palliative Medicine',
         email: email.trim(),
-        phone: phone.trim(),
-        service_area: serviceArea.trim(),
         password,
       };
 
@@ -64,10 +59,7 @@ export default function AdminDoctorManagement({
 
       // Reset form
       setName('');
-      setSpecialization('');
       setEmail('');
-      setPhone('');
-      setServiceArea('');
       setPassword('');
       setShowAddModal(false);
 
@@ -149,8 +141,8 @@ export default function AdminDoctorManagement({
                   <tr key={doc.user_id} className="hover:bg-[#faf7f0] transition-colors">
                     <td className="py-3.5 px-4 font-black text-[#1e1b14]">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-lg bg-[#f4f2e9] text-[#645e45] flex items-center justify-center font-extrabold text-xs border border-[#e2dec9]">
-                          Dr
+                        <div className="w-7 h-7 rounded-lg bg-[#f4f2e9] text-[#645e45] flex items-center justify-center border border-[#e2dec9]">
+                          <Stethoscope className="w-4 h-4" />
                         </div>
                         <span>{doc.name}</span>
                       </div>
@@ -239,8 +231,15 @@ export default function AdminDoctorManagement({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="sm:col-span-2">
+            {fieldErrors.detail && (
+              <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{Array.isArray(fieldErrors.detail) ? fieldErrors.detail[0] : fieldErrors.detail}</span>
+              </div>
+            )}
+
+            <div className="space-y-3 text-xs">
+              <div>
                 <label className="block font-extrabold text-[#1e1b14] mb-1">
                   Full Name <span className="text-rose-500">*</span>
                 </label>
@@ -257,78 +256,52 @@ export default function AdminDoctorManagement({
                 )}
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Specialization <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={specialization}
-                  onChange={(e) => setSpecialization(e.target.value)}
-                  placeholder="e.g. Palliative Medicine, Oncology, Pain Management"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-extrabold text-[#1e1b14] mb-1">
+                    Email Address <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="doctor@karunagrid.org"
+                    className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
+                  />
+                  {fieldErrors.email && (
+                    <p className="text-rose-600 font-semibold mt-0.5">{fieldErrors.email[0]}</p>
+                  )}
+                </div>
 
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Email Address <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="doctor@karunagrid.org"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
-                {fieldErrors.email && (
-                  <p className="text-rose-600 font-semibold mt-0.5">{fieldErrors.email[0]}</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Phone Number (10 digits) <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  maxLength={10}
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                  placeholder="9876543210"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Service Area / District <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={serviceArea}
-                  onChange={(e) => setServiceArea(e.target.value)}
-                  placeholder="e.g. Ernakulam District"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-extrabold text-[#1e1b14] mb-1">
-                  Initial Password <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="w-full px-3 py-2 bg-[#fdfbf7] border border-[#e0d9cc] rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45]"
-                />
+                <div>
+                  <label className="block font-extrabold text-[#1e1b14] mb-1">
+                    Initial Password <span className="text-rose-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      minLength={8}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Min. 8 characters"
+                      className={`w-full px-3 py-2 pr-9 bg-[#fdfbf7] border rounded-xl focus:outline-none focus:ring-1 focus:ring-[#645e45] ${
+                        fieldErrors.password ? 'border-rose-400' : 'border-[#e0d9cc]'
+                      }`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#7b776c] hover:text-[#1e1b14] p-0.5 cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                  {fieldErrors.password && (
+                    <p className="text-rose-600 font-semibold mt-0.5">{fieldErrors.password[0]}</p>
+                  )}
+                </div>
               </div>
             </div>
 

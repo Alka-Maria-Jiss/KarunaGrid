@@ -1,6 +1,8 @@
 from django.urls import path
+from care_coordination.views import DoctorHomeVisitsView
 from .views import (
     RegisterView,
+    CheckApplicationStatusView,
     LoginView,
     RefreshTokenView,
     LogoutView,
@@ -18,6 +20,7 @@ from .views import (
     AdminOnboardDoctorView,
     AdminOnboardNurseView,
     AdminStatsView,
+    AdminProfileView,
     AdminUserListView,
     AdminUserToggleStatusView,
     AdminPatientListView,
@@ -42,21 +45,56 @@ from .views import (
     PatientWelfareView,
     PatientCaregiverView,
     PatientTimelineView,
+    DoctorProfileView,
+    DoctorDashboardView,
+    DoctorAvailabilityView,
+    DoctorPatientListView,
+    DoctorPatientMedicalProfileView,
+    DoctorPatientTimelineView,
+    DoctorReportsView,
+    NurseProfileView,
+    NurseDashboardView,
+    NurseAvailabilityView,
+    NursePatientListView,
+    NursePatientMedicalProfileView,
+    NursePatientTimelineView,
+    NurseReportsView,
 )
 
 urlpatterns = [
     path('register/', RegisterView.as_view(), name='auth_register'),
+    path('auth/register/', RegisterView.as_view(), name='auth_register_prefixed'),
+    path('application-status/', CheckApplicationStatusView.as_view(), name='auth_application_status'),
+    path('auth/application-status/', CheckApplicationStatusView.as_view(), name='auth_application_status_prefixed'),
     path('login/', LoginView.as_view(), name='auth_login'),
+    path('auth/login/', LoginView.as_view(), name='auth_login_prefixed'),
     path('token/refresh/', RefreshTokenView.as_view(), name='auth_token_refresh'),
     path('logout/', LogoutView.as_view(), name='auth_logout'),
     path('documents/view/', SecureDocumentView.as_view(), name='secure_document_view'),
     path('me/', CurrentUserProfileView.as_view(), name='auth_me'),
 
-    # Doctor Patient Approval routes (Preserved strictly for Doctor workflow)
+    # Nurse Portal Routes (Authenticated Nurse Only)
+    path('nurse/profile/', NurseProfileView.as_view(), name='nurse_profile'),
+    path('nurse/dashboard/', NurseDashboardView.as_view(), name='nurse_dashboard'),
+    path('nurse/availability/', NurseAvailabilityView.as_view(), name='nurse_availability'),
+    path('nurse/patients/', NursePatientListView.as_view(), name='nurse_patients'),
+    path('nurse/patients/<int:patient_id>/profile/', NursePatientMedicalProfileView.as_view(), name='nurse_patient_medical_profile'),
+    path('nurse/patients/<int:patient_id>/timeline/', NursePatientTimelineView.as_view(), name='nurse_patient_timeline'),
+    path('nurse/reports/', NurseReportsView.as_view(), name='nurse_reports'),
+
+    # Doctor Portal Routes (Authenticated Doctor Only)
+    path('doctor/profile/', DoctorProfileView.as_view(), name='doctor_profile'),
+    path('doctor/dashboard/', DoctorDashboardView.as_view(), name='doctor_dashboard'),
+    path('doctor/availability/', DoctorAvailabilityView.as_view(), name='doctor_availability'),
+    path('doctor/patients/', DoctorPatientListView.as_view(), name='doctor_patients'),
     path('doctor/patients/pending/', DoctorPendingPatientsView.as_view(), name='doctor_pending_patients'),
     path('doctor/patients/<int:patient_id>/', DoctorPatientDetailView.as_view(), name='doctor_patient_detail'),
+    path('doctor/patients/<int:patient_id>/profile/', DoctorPatientMedicalProfileView.as_view(), name='doctor_patient_medical_profile'),
+    path('doctor/patients/<int:patient_id>/timeline/', DoctorPatientTimelineView.as_view(), name='doctor_patient_timeline'),
     path('doctor/patients/<int:patient_id>/approve/', DoctorApprovePatientView.as_view(), name='doctor_approve_patient'),
     path('doctor/patients/<int:patient_id>/reject/', DoctorRejectPatientView.as_view(), name='doctor_reject_patient'),
+    path('doctor/home-visits/', DoctorHomeVisitsView.as_view(), name='doctor_home_visits'),
+    path('doctor/reports/', DoctorReportsView.as_view(), name='doctor_reports'),
 
     # Admin Caregiver Verification & Staff Creation routes
     path('admin/caregivers/pending/', AdminPendingCaregiversView.as_view(), name='admin_pending_caregivers'),
@@ -68,6 +106,7 @@ urlpatterns = [
     path('admin/onboard-nurse/', AdminOnboardNurseView.as_view(), name='admin_onboard_nurse'),
 
     # Redesigned Phase 1 Administrator Dashboard & Management APIs
+    path('admin/profile/', AdminProfileView.as_view(), name='admin_profile'),
     path('admin/stats/', AdminStatsView.as_view(), name='admin_stats'),
     path('admin/users/', AdminUserListView.as_view(), name='admin_users'),
     path('admin/users/<int:user_id>/toggle-status/', AdminUserToggleStatusView.as_view(), name='admin_user_toggle_status'),

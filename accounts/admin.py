@@ -1,7 +1,17 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 from django.utils.html import format_html
-from .models import User, Administrator, Doctor, Nurse, Patient, Caregiver, VerificationStatus, RegistrationStatus
+from .models import (
+    User,
+    Administrator,
+    Doctor,
+    Nurse,
+    Patient,
+    PatientRegistrationApplication,
+    Caregiver,
+    VerificationStatus,
+    RegistrationStatus,
+)
 from .notifications import create_status_notification
 
 
@@ -61,20 +71,32 @@ class UserAdmin(BaseUserAdmin):
 
 @admin.register(Administrator)
 class AdministratorAdmin(admin.ModelAdmin):
-    list_display = ('admin_id', 'name', 'user', 'phone', 'created_at', 'updated_at')
-    search_fields = ('name', 'user__email')
+    list_display = ('admin_id', 'name', 'get_email', 'gender', 'qualification', 'experience', 'phone', 'created_at')
+    search_fields = ('name', 'user__email', 'qualification', 'phone')
+    fieldsets = (
+        ('Basic Details', {'fields': ('user', 'name', 'phone', 'gender', 'date_of_birth')}),
+        ('Professional Details', {'fields': ('qualification', 'experience')}),
+    )
+
+    def get_email(self, obj):
+        return obj.user.email if obj.user else "-"
+    get_email.short_description = 'Email'
 
 
 @admin.register(Doctor)
 class DoctorAdmin(admin.ModelAdmin):
-    list_display = ('doctor_id', 'name', 'specialization', 'phone', 'panchayath', 'pincode', 'is_available_now', 'verification_status', 'created_at')
-    list_filter = ('verification_status', 'is_available_now')
-    search_fields = ('name', 'specialization', 'place', 'panchayath', 'pincode', 'user__email')
+    list_display = ('doctor_id', 'name', 'get_email', 'specialization', 'qualification', 'experience', 'gender', 'service_area', 'phone', 'is_available_now', 'verification_status', 'created_at')
+    list_filter = ('verification_status', 'is_available_now', 'gender')
+    search_fields = ('name', 'specialization', 'qualification', 'service_area', 'user__email')
     fieldsets = (
-        ('Basic Details', {'fields': ('user', 'name', 'phone', 'specialization', 'is_available_now')}),
-        ('Address Details', {'fields': ('house_name', 'place', 'panchayath', 'ward_no', 'pincode')}),
+        ('Basic Details', {'fields': ('user', 'name', 'phone', 'gender', 'date_of_birth')}),
+        ('Professional Details', {'fields': ('specialization', 'qualification', 'experience', 'service_area', 'is_available_now')}),
         ('Verification & Status', {'fields': ('verification_status', 'rejection_reason', 'verified_by_admin')}),
     )
+
+    def get_email(self, obj):
+        return obj.user.email if obj.user else "-"
+    get_email.short_description = 'Email'
 
     def save_model(self, request, obj, form, change):
         if not change and not obj.verification_status:
@@ -84,19 +106,48 @@ class DoctorAdmin(admin.ModelAdmin):
 
 @admin.register(Nurse)
 class NurseAdmin(admin.ModelAdmin):
-    list_display = ('nurse_id', 'name', 'phone', 'panchayath', 'pincode', 'is_available_now', 'verification_status', 'created_at')
-    list_filter = ('verification_status', 'is_available_now')
-    search_fields = ('name', 'place', 'panchayath', 'pincode', 'user__email')
+    list_display = ('nurse_id', 'name', 'get_email', 'specialization', 'qualification', 'experience', 'gender', 'service_area', 'phone', 'is_available_now', 'verification_status', 'created_at')
+    list_filter = ('verification_status', 'is_available_now', 'gender')
+    search_fields = ('name', 'specialization', 'qualification', 'service_area', 'user__email')
     fieldsets = (
-        ('Basic Details', {'fields': ('user', 'name', 'phone', 'is_available_now')}),
-        ('Address Details', {'fields': ('house_name', 'place', 'panchayath', 'ward_no', 'pincode')}),
+        ('Basic Details', {'fields': ('user', 'name', 'phone', 'gender', 'date_of_birth')}),
+        ('Professional Details', {'fields': ('specialization', 'qualification', 'experience', 'service_area', 'is_available_now')}),
         ('Verification & Status', {'fields': ('verification_status', 'rejection_reason', 'verified_by_admin')}),
     )
+
+    def get_email(self, obj):
+        return obj.user.email if obj.user else "-"
+    get_email.short_description = 'Email'
 
     def save_model(self, request, obj, form, change):
         if not change and not obj.verification_status:
             obj.verification_status = VerificationStatus.APPROVED
         super().save_model(request, obj, form, change)
+
+
+@admin.register(PatientRegistrationApplication)
+class PatientRegistrationApplicationAdmin(admin.ModelAdmin):
+    list_display = ('application_id', 'name', 'email', 'phone', 'panchayath', 'registration_status', 'reviewed_by_doctor', 'reviewed_at', 'created_at')
+    list_filter = ('registration_status', 'created_at', 'gender')
+    search_fields = ('application_id', 'name', 'email', 'phone', 'panchayath', 'pincode')
+    readonly_fields = ('application_id', 'discharge_summary_preview', 'created_at', 'updated_at', 'reviewed_at')
+    fieldsets = (
+        ('Application Details', {'fields': ('application_id', 'name', 'email', 'dob', 'gender', 'phone')}),
+        ('Address Details', {'fields': ('house_name', 'place', 'panchayath', 'ward_no', 'pincode')}),
+        ('Medical Referral Document', {'fields': ('discharge_summary_path', 'discharge_summary_preview')}),
+        ('Emergency Contact', {'fields': ('emergency_contact_name', 'emergency_contact_phone')}),
+        ('Doctor Review & Decision', {'fields': ('registration_status', 'rejection_reason', 'reviewed_by_doctor', 'reviewed_at', 'created_patient')}),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+    def discharge_summary_preview(self, obj):
+        if obj.discharge_summary_path:
+            return format_html(
+                '<a href="/api/auth/documents/view/?type=patient_discharge_summary&id={}" target="_blank" style="font-weight:bold; color:#0284c7;">📄 View Secure Discharge Summary Document</a>',
+                obj.id
+            )
+        return "No discharge summary document uploaded"
+    discharge_summary_preview.short_description = "Discharge Summary Document"
 
 
 @admin.register(Patient)

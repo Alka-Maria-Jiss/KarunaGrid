@@ -50,9 +50,16 @@ export class ErrorBoundary extends React.Component {
               Something went wrong
             </h1>
 
-            <p className="text-serene-muted text-sm leading-relaxed mb-8 font-medium">
+            <p className="text-serene-muted text-sm leading-relaxed mb-4 font-medium">
               We encountered an unexpected rendering error. Let's get you back on track safely.
             </p>
+
+            {this.state.error && (
+              <div className="w-full text-left p-3 mb-6 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs font-mono break-all max-h-32 overflow-y-auto">
+                <span className="font-bold block mb-1">Details:</span>
+                {this.state.error.message || String(this.state.error)}
+              </div>
+            )}
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3 w-full">

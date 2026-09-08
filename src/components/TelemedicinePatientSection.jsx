@@ -41,13 +41,16 @@ export default function TelemedicinePatientSection({ userProfile, showSuccess, s
   // Fetch doctors list for dropdown
   const fetchDoctors = async () => {
     try {
-      const res = await apiClient.get('/accounts/profile/');
-      // Pre-select assigned doctor if available
-      if (userProfile?.reviewed_by_doctor?.doctor_id) {
-        setSelectedDoctorId(String(userProfile.reviewed_by_doctor.doctor_id));
+      const docRes = await apiClient.get('/telemedicine/doctors/');
+      const docList = Array.isArray(docRes) ? docRes : (docRes?.results || []);
+      setDoctors(docList);
+      if (docList.length > 0 && !selectedDoctorId) {
+        const assignedId = userProfile?.assigned_doctor_id || userProfile?.reviewed_by_doctor_id;
+        const matchedDoc = docList.find(d => d.doctor_id === assignedId || d.user_id === assignedId);
+        setSelectedDoctorId(matchedDoc ? String(matchedDoc.doctor_id) : String(docList[0].doctor_id));
       }
     } catch (err) {
-      console.error('Failed to load doctor profile info:', err);
+      console.error('Failed to load doctors list:', err);
     }
   };
 
@@ -342,18 +345,30 @@ export default function TelemedicinePatientSection({ userProfile, showSuccess, s
                 </div>
               )}
 
-              {/* Assigned Doctor Display */}
+              {/* Doctor Selection */}
               <div>
                 <label className="block text-xs font-bold text-stone-600 uppercase tracking-wider mb-1">
-                  Selected Doctor
+                  Selected Doctor <span className="text-rose-500">*</span>
                 </label>
-                <div className="p-3 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-between text-sm font-semibold text-stone-800">
-                  <div className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-emerald-700" />
-                    <span>Dr. {assignedDoctorName}</span>
-                  </div>
-                  <span className="text-xs text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded font-bold">Assigned</span>
-                </div>
+                <select
+                  required
+                  value={selectedDoctorId}
+                  onChange={(e) => setSelectedDoctorId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-sm font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-stone-50"
+                >
+                  {doctors.length === 0 ? (
+                    <option value="">No doctors are currently available for telemedicine</option>
+                  ) : (
+                    <>
+                      <option value="">Select a Doctor...</option>
+                      {doctors.map((d) => (
+                        <option key={d.doctor_id} value={d.doctor_id}>
+                          {d.name} — {d.specialization || 'Palliative Medicine'}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
               </div>
 
               {/* Date Selection */}

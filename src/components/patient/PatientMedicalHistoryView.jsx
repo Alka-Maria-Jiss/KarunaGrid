@@ -53,14 +53,17 @@ export default function PatientMedicalHistoryView({
             </p>
           ) : (
             <div className="space-y-2.5">
-              {diagnoses.map((d) => (
-                <div key={d.id} className="p-3.5 rounded-xl bg-[#fdfbf7] border border-[#f0eae0] space-y-1">
-                  <p className="text-xs font-black text-[#1e1b14]">{d.text}</p>
-                  <p className="text-[11px] text-[#7b776c] font-medium">
-                    Diagnosed by {d.doctor} • {d.date}
-                  </p>
-                </div>
-              ))}
+              {diagnoses.map((d) => {
+                const cleanText = (d.text || '').replace(/^:\s*/, '').trim();
+                return (
+                  <div key={d.id} className="p-3.5 rounded-xl bg-[#fdfbf7] border border-[#f0eae0] space-y-1">
+                    <p className="text-xs font-black text-[#1e1b14]">{cleanText}</p>
+                    <p className="text-[11px] text-[#7b776c] font-medium">
+                      Diagnosed by {d.doctor} • {d.date}
+                    </p>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

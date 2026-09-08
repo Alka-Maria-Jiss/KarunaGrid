@@ -82,6 +82,7 @@ class LabReport(models.Model):
     uploaded_by = models.ForeignKey(
         'accounts.User', on_delete=models.CASCADE, db_column='uploaded_by_user_id', related_name='uploaded_lab_reports'
     )
+    investigation_name = models.CharField(max_length=150, null=True, blank=True)
     file_path = models.CharField(max_length=255)
     report_date = models.DateField(null=True, blank=True)
     review_status = models.CharField(
@@ -91,6 +92,7 @@ class LabReport(models.Model):
         'accounts.User', on_delete=models.SET_NULL, null=True, blank=True, db_column='reviewed_by_user_id', related_name='reviewed_lab_reports'
     )
     remarks = models.TextField(null=True, blank=True)
+    reviewed_at = models.DateTimeField(null=True, blank=True)
     uploaded_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -98,7 +100,7 @@ class LabReport(models.Model):
         db_table = 'lab_reports'
 
     def __str__(self):
-        return f"LabReport #{self.report_id} - Status: {self.review_status}"
+        return f"LabReport #{self.report_id} ({self.investigation_name or 'Investigation'}) - Status: {self.review_status}"
 
 
 class Prescription(models.Model):
@@ -114,6 +116,10 @@ class Prescription(models.Model):
 
     class Meta:
         db_table = 'prescriptions'
+
+    @property
+    def items(self):
+        return self.prescriptionitem_set
 
     def __str__(self):
         return f"Prescription #{self.prescription_id} v{self.version_number} ({self.status})"

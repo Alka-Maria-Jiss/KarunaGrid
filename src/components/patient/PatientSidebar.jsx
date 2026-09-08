@@ -17,8 +17,8 @@ import {
   Bell,
   LogOut,
   X,
-  Heart,
 } from 'lucide-react';
+import logoImg from '../../assets/logo.png';
 
 const navSections = [
   {
@@ -44,7 +44,7 @@ const navSections = [
       { id: 'telemedicine', label: 'Telemedicine Request', icon: Video },
       { id: 'home_visits', label: 'Home Visit Request', icon: Home },
       { id: 'schedule_change', label: 'Schedule Change Request', icon: CalendarClock },
-      { id: 'equipment', label: 'Medical Equipment Request', icon: Boxes },
+      { id: 'equipment', label: 'Equipment Request', icon: Boxes },
     ],
   },
   {
@@ -81,9 +81,11 @@ export default function PatientSidebar({
       {/* Brand Header */}
       <div className="p-5 flex items-center justify-between border-b border-[#f2ece1]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-[#645e45] text-[#fff9ef] flex items-center justify-center shadow-xs">
-            <Heart className="w-5 h-5 fill-current" />
-          </div>
+          <img
+            src={logoImg}
+            alt="KarunaGrid Official Logo"
+            className="w-10 h-10 object-contain rounded-full shadow-sm bg-white p-0.5 border border-[#e0d9cc]"
+          />
           <div>
             <h1 className="font-extrabold text-sm tracking-tight text-[#1e1b14] leading-none">
               KarunaGrid
@@ -128,19 +130,19 @@ export default function PatientSidebar({
                       onSelectView(item.id);
                       if (onCloseMobile) onCloseMobile();
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-bold text-left transition-all cursor-pointer ${
                       isActive
                         ? 'bg-[#645e45] text-white shadow-2xs'
                         : 'text-[#4a473d] hover:bg-[#f4ede0] hover:text-[#1e1b14]'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0 text-left">
                       <Icon
-                        className={`w-4 h-4 transition-colors ${
+                        className={`w-4 h-4 flex-shrink-0 transition-colors ${
                           isActive ? 'text-white' : 'text-[#7b776c]'
                         }`}
                       />
-                      <span>{item.label}</span>
+                      <span className="truncate">{item.label}</span>
                     </div>
 
                     {showBadge && (

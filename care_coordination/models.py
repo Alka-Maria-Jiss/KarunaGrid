@@ -21,10 +21,14 @@ class ConsultationStatus(models.TextChoices):
 
 
 class ScheduleFrequency(models.TextChoices):
+    EVERY_DAY = 'Every Day', 'Every Day'
+    DAILY = 'Daily', 'Daily'
     WEEKLY = 'Weekly', 'Weekly'
     TWICE_WEEKLY = 'TwiceWeekly', 'TwiceWeekly'
+    EVERY_2_WEEKS = 'Every 2 Weeks', 'Every 2 Weeks'
     FORTNIGHTLY = 'Fortnightly', 'Fortnightly'
     MONTHLY = 'Monthly', 'Monthly'
+    CUSTOM = 'Custom', 'Custom'
 
 
 class ScheduleStatus(models.TextChoices):
@@ -153,8 +157,9 @@ class TelemedicineFollowUp(models.Model):
 class HomeVisitSchedule(models.Model):
     schedule_id = models.AutoField(primary_key=True)
     patient = models.ForeignKey('accounts.Patient', on_delete=models.CASCADE, db_column='patient_id')
-    doctor = models.ForeignKey('accounts.Doctor', on_delete=models.CASCADE, db_column='doctor_id')
-    frequency = models.CharField(max_length=20, choices=ScheduleFrequency.choices)
+    nurse = models.ForeignKey('accounts.Nurse', on_delete=models.CASCADE, db_column='nurse_id')
+    frequency = models.CharField(max_length=30, choices=ScheduleFrequency.choices)
+    custom_days = models.JSONField(default=list, blank=True, null=True)
     start_date = models.DateField()
     status = models.CharField(
         max_length=20, choices=ScheduleStatus.choices, default=ScheduleStatus.ACTIVE
@@ -165,7 +170,7 @@ class HomeVisitSchedule(models.Model):
         db_table = 'home_visit_schedules'
 
     def __str__(self):
-        return f"Schedule #{self.schedule_id} - {self.frequency}"
+        return f"Schedule #{self.schedule_id} - {self.frequency} (Nurse #{self.nurse_id})"
 
 
 class HomeVisitOccurrence(models.Model):
@@ -191,6 +196,10 @@ class HomeVisitOccurrence(models.Model):
     allocated_nurse = models.ForeignKey(
         'accounts.Nurse', on_delete=models.SET_NULL, null=True, blank=True, db_column='allocated_nurse_id', related_name='allocated_occurrences'
     )
+    visiting_doctor = models.ForeignKey(
+        'accounts.Doctor', on_delete=models.SET_NULL, null=True, blank=True, db_column='visiting_doctor_id', related_name='visiting_occurrences'
+    )
+    is_doctor_customized = models.BooleanField(default=False)
     notes = models.TextField(null=True, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
 

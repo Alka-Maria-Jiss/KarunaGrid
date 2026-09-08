@@ -37,6 +37,10 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path('api/notifications/', include('notifications.urls')),
     path('api/telemedicine/', include('care_coordination.urls')),
+    path('api/doctor/telemedicine/', include('care_coordination.doctor_urls')),
+    path('api/care-coordination/', include('care_coordination.urls')),
+    path('api/medical-records/', include('medical_records.urls')),
+    path('api/resources/', include('resources.urls')),
 ]
 
 if settings.DEBUG:
