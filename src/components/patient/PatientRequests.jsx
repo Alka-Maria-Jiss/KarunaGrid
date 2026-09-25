@@ -30,7 +30,7 @@ export default function PatientRequests({
           <div className="space-y-2.5">
             {requests.map((req) => {
               const isEquip = req.type?.toLowerCase().includes('equipment');
-              const isWelf = req.type?.toLowerCase().includes('welfare');
+              const isHome = req.type?.toLowerCase().includes('home') || req.type?.toLowerCase().includes('visit');
               const isTele = req.type?.toLowerCase().includes('telemedicine');
 
               return (
@@ -43,15 +43,15 @@ export default function PatientRequests({
                       className={`p-2.5 rounded-xl border flex-shrink-0 ${
                         isEquip
                           ? 'bg-[#f4f2e9] text-[#645e45] border-[#e2dec9]'
-                          : isWelf
+                          : isHome
                           ? 'bg-[#f8f3eb] text-[#7a6449] border-[#e8dccb]'
                           : 'bg-[#edf3ec] text-[#426442] border-[#d2e2d0]'
                       }`}
                     >
                       {isEquip ? (
                         <Boxes className="w-4 h-4" />
-                      ) : isWelf ? (
-                        <ScrollText className="w-4 h-4" />
+                      ) : isHome ? (
+                        <Home className="w-4 h-4" />
                       ) : (
                         <Video className="w-4 h-4" />
                       )}

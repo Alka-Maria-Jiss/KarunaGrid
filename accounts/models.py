@@ -257,3 +257,29 @@ class Caregiver(models.Model):
 
     def __str__(self):
         return f"Caregiver: {self.name}"
+
+
+class PasswordResetOTP(models.Model):
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='password_reset_otps',
+        db_column='user_id',
+        db_index=True
+    )
+    otp_hash = models.CharField(max_length=255)
+    reset_token_hash = models.CharField(max_length=255, null=True, blank=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    expires_at = models.DateTimeField()
+    token_expires_at = models.DateTimeField(null=True, blank=True)
+    is_used = models.BooleanField(default=False)
+    is_verified = models.BooleanField(default=False)
+    attempt_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        db_table = 'password_reset_otps'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"PasswordResetOTP for {self.user.email} (used={self.is_used}, verified={self.is_verified})"

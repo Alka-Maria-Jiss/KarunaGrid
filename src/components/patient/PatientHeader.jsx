@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Menu, Bell, User, ChevronDown, LogOut, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { Menu, User, ChevronDown, LogOut, CheckCircle2, ShieldAlert } from 'lucide-react';
+import NotificationDropdown from '../NotificationDropdown';
 
 export default function PatientHeader({
   patientInfo = {},
@@ -53,19 +54,12 @@ export default function PatientHeader({
       {/* Right: Notifications & Profile */}
       <div className="flex items-center gap-3">
         {/* Notification Bell */}
-        <button
-          type="button"
-          onClick={() => onNavigate && onNavigate('notifications')}
-          className="relative p-2.5 rounded-xl text-[#4a473d] bg-white hover:bg-[#f4ede0] border border-[#e9e2d5] transition-all cursor-pointer shadow-2xs"
-          title="Notifications"
-        >
-          <Bell className="w-4 h-4" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-[#ba1a1a] text-white text-[10px] font-extrabold rounded-full flex items-center justify-center px-1 shadow-2xs">
-              {unreadCount}
-            </span>
-          )}
-        </button>
+        <NotificationDropdown
+          onViewAll={() => onNavigate && onNavigate('notifications')}
+          buttonClassName="relative p-2.5 rounded-xl text-[#4a473d] bg-white hover:bg-[#f4ede0] border border-[#e9e2d5] transition-all cursor-pointer shadow-2xs"
+          iconClassName="w-4 h-4"
+          initialUnreadCount={unreadCount}
+        />
 
         {/* Profile Menu Dropdown */}
         <div className="relative">

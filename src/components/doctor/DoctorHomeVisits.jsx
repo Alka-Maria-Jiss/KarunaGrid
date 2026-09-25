@@ -50,10 +50,19 @@ export default function DoctorHomeVisits() {
     fetchData();
   }, []);
 
-  const upcomingVisits = (data.occurrences || []).filter(
+  const parseVisitDate = (occ) => {
+    if (!occ) return 0;
+    if (occ.raw_date) return new Date(occ.raw_date).getTime();
+    if (occ.scheduled_date) return new Date(occ.scheduled_date).getTime();
+    return 0;
+  };
+
+  const sortedOccurrences = [...(data.occurrences || [])].sort((a, b) => parseVisitDate(a) - parseVisitDate(b));
+
+  const upcomingVisits = sortedOccurrences.filter(
     (o) => o.status === 'Scheduled' || o.status === 'Rescheduled' || o.status === 'Pending'
   );
-  const completedVisits = (data.occurrences || []).filter(
+  const completedVisits = sortedOccurrences.filter(
     (o) => o.status === 'Completed'
   );
 
@@ -145,7 +154,7 @@ export default function DoctorHomeVisits() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#f2ece1] text-[#1e1b14]">
-                  {data.occurrences.map((occ) => (
+                  {sortedOccurrences.map((occ) => (
                     <tr key={occ.occurrence_id} className="hover:bg-[#fdfbf7] transition-colors">
                       <td className="py-3.5 px-4 font-black">
                         <div className="flex items-center space-x-1.5">

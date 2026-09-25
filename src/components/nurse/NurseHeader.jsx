@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import {
-  Bell,
   Menu,
   LogOut,
   User,
@@ -9,6 +8,7 @@ import {
   Loader2,
   ChevronDown
 } from 'lucide-react';
+import NotificationDropdown from '../NotificationDropdown';
 
 export default function NurseHeader({
   nurse,
@@ -80,18 +80,12 @@ export default function NurseHeader({
         </button>
 
         {/* Notifications Bell */}
-        <button
-          onClick={onOpenNotifications}
-          className="relative p-2 rounded-full text-[#4a473d] hover:bg-[#f3ede2] transition-colors"
-          title="View Notifications"
-        >
-          <Bell className="w-5 h-5" />
-          {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 bg-red-600 text-white rounded-full text-[9px] font-black flex items-center justify-center animate-pulse">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
+        <NotificationDropdown
+          onViewAll={onOpenNotifications || (() => onNavigate && onNavigate('notifications'))}
+          buttonClassName="relative p-2 rounded-full text-[#4a473d] hover:bg-[#f3ede2] transition-colors cursor-pointer"
+          iconClassName="w-5 h-5"
+          initialUnreadCount={unreadCount}
+        />
 
         {/* Profile Avatar & Dropdown */}
         <div className="relative">

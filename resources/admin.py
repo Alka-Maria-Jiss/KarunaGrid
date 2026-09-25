@@ -1,7 +1,6 @@
 from django.contrib import admin
 from .models import (
     WelfareScheme,
-    WelfareApplication,
     EquipmentType,
     EquipmentUnit,
     EquipmentRequest,
@@ -10,15 +9,9 @@ from .models import (
 
 @admin.register(WelfareScheme)
 class WelfareSchemeAdmin(admin.ModelAdmin):
-    list_display = ('scheme_id', 'name', 'created_by_admin', 'created_at', 'updated_at')
-    search_fields = ('name', 'created_by_admin__name')
-
-
-@admin.register(WelfareApplication)
-class WelfareApplicationAdmin(admin.ModelAdmin):
-    list_display = ('application_id', 'patient', 'scheme', 'submitted_by', 'status', 'submitted_at')
-    list_filter = ('status',)
-    search_fields = ('patient__name', 'scheme__name', 'submitted_by__email')
+    list_display = ('scheme_id', 'name', 'category', 'status', 'government_department', 'published_at', 'created_at')
+    list_filter = ('status', 'category')
+    search_fields = ('name', 'category', 'government_department', 'created_by_admin__name')
 
 
 @admin.register(EquipmentType)

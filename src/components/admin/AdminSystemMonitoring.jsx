@@ -98,7 +98,7 @@ export default function AdminSystemMonitoring({ stats = {}, activities = [] }) {
             <ul className="space-y-1 text-[11px] list-disc list-inside">
               <li>Caregiver Identity Document Verification & Approval</li>
               <li>Pre-approved Doctor & Nurse Staff Onboarding</li>
-              <li>Government Welfare Schemes & Application Review</li>
+              <li>Government Welfare Scheme Publishing & Information Management</li>
               <li>Assistive Medical Device Inventory & Unit Management</li>
               <li>User Account Activation & Cross-Role Monitoring</li>
             </ul>

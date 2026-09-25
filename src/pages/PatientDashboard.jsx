@@ -219,15 +219,6 @@ export default function PatientDashboard({ user, onLogout }) {
       case 'welfare_schemes':
         return (
           <PatientWelfareView
-            initialTab="schemes"
-            onRefresh={fetchPatientData}
-          />
-        );
-
-      case 'my_applications':
-        return (
-          <PatientWelfareView
-            initialTab="applications"
             onRefresh={fetchPatientData}
           />
         );

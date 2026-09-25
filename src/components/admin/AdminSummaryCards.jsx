@@ -51,7 +51,7 @@ export default function AdminSummaryCards({ stats = {}, onNavigate }) {
       iconBg: 'bg-[#faf0ec] text-[#9c4c37] border-[#ebd4cc]',
       cardBg: 'bg-white',
       viewTarget: 'caregiver_verification',
-      description: 'Verifications & welfare',
+      description: 'Caregiver verifications',
       isHighlight: (stats.pending_admin_actions ?? 0) > 0,
     },
   ];

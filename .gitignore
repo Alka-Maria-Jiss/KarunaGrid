@@ -39,3 +39,9 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
+
+# Test Artifacts & Reports
+test-results/
+playwright-report/
+tests/e2e/html-report/
+tests/e2e/test-results.json

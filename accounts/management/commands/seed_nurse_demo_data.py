@@ -44,14 +44,6 @@ class Command(BaseCommand):
                     "service_area": "Changanassery & Erattupetta",
                     "panchayath": "Changanassery",
                     "is_available_now": True,
-                },
-                {
-                    "email": "test_nurse@karunagrid.org",
-                    "name": "Sarah Connor",
-                    "phone": "9847000111",
-                    "service_area": "Bharananganam & Pala",
-                    "panchayath": "Bharananganam",
-                    "is_available_now": True,
                 }
             ]
 
@@ -72,7 +64,6 @@ class Command(BaseCommand):
                         "name": nd["name"],
                         "phone": nd["phone"],
                         "service_area": nd["service_area"],
-                        "panchayath": nd["panchayath"],
                         "is_available_now": nd["is_available_now"],
                         "verification_status": VerificationStatus.APPROVED
                     }

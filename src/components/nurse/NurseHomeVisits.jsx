@@ -91,7 +91,13 @@ export default function NurseHomeVisits({
       });
       if (res.ok) {
         const data = await res.json();
-        setVisits(Array.isArray(data) ? data : []);
+        const list = Array.isArray(data) ? data : [];
+        list.sort((a, b) => {
+          const dateA = a.raw_date ? new Date(a.raw_date).getTime() : (a.scheduled_date ? new Date(a.scheduled_date).getTime() : 0);
+          const dateB = b.raw_date ? new Date(b.raw_date).getTime() : (b.scheduled_date ? new Date(b.scheduled_date).getTime() : 0);
+          return dateA - dateB;
+        });
+        setVisits(list);
       }
     } catch (err) {
       console.error('Error fetching nurse home visits:', err);

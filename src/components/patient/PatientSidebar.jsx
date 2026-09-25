@@ -12,7 +12,6 @@ import {
   CalendarClock,
   Boxes,
   ScrollText,
-  FileCheck,
   HeartHandshake,
   Bell,
   LogOut,
@@ -51,7 +50,6 @@ const navSections = [
     title: 'WELFARE',
     items: [
       { id: 'welfare_schemes', label: 'Government Schemes', icon: ScrollText },
-      { id: 'my_applications', label: 'My Applications', icon: FileCheck },
     ],
   },
   {

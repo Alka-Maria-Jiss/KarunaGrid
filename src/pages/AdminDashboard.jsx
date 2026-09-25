@@ -34,7 +34,6 @@ export default function AdminDashboard({ user, onLogout }) {
   const [users, setUsers] = useState([]);
   const [pendingCaregivers, setPendingCaregivers] = useState([]);
   const [welfareSchemes, setWelfareSchemes] = useState([]);
-  const [welfareApps, setWelfareApps] = useState([]);
   const [equipmentData, setEquipmentData] = useState({ types: [], units: [] });
   const [patients, setPatients] = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -42,7 +41,6 @@ export default function AdminDashboard({ user, onLogout }) {
 
   // Modal / Review States
   const [reviewCaregiverModal, setReviewCaregiverModal] = useState(null);
-  const [reviewWelfareAppModal, setReviewWelfareAppModal] = useState(null);
 
   const { showSuccess, showError } = useToast();
 
@@ -74,19 +72,12 @@ export default function AdminDashboard({ user, onLogout }) {
         console.warn('Users fetch:', err);
       }
 
-      // 4. Fetch Welfare Schemes & Applications
+      // 4. Fetch Welfare Schemes
       try {
         const schemesRes = await apiClient.get('/admin/welfare-schemes/');
         setWelfareSchemes(schemesRes || []);
       } catch (err) {
         console.warn('Welfare schemes fetch:', err);
-      }
-
-      try {
-        const appsRes = await apiClient.get('/admin/welfare-applications/');
-        setWelfareApps(appsRes || []);
-      } catch (err) {
-        console.warn('Welfare applications fetch:', err);
       }
 
       // 5. Fetch Equipment Data
@@ -148,15 +139,9 @@ export default function AdminDashboard({ user, onLogout }) {
   const nursesList = safeUsers.filter((u) => u.role?.toLowerCase() === 'nurse');
   const caregiversList = safeUsers.filter((u) => u.role?.toLowerCase() === 'caregiver');
 
-  const safeWelfareApps = Array.isArray(welfareApps) ? welfareApps : [];
-  const pendingWelfareCount = safeWelfareApps.filter(
-    (a) => a && (a.status === 'Submitted' || a.status === 'UnderReview')
-  ).length;
-
   const safePendingCaregivers = Array.isArray(pendingCaregivers) ? pendingCaregivers : [];
   const pendingCounts = {
     caregivers: safePendingCaregivers.length,
-    welfare: pendingWelfareCount,
   };
 
   const renderActiveView = () => {
@@ -211,19 +196,7 @@ export default function AdminDashboard({ user, onLogout }) {
         return (
           <AdminWelfareSchemes
             schemes={welfareSchemes}
-            applications={welfareApps}
             onRefresh={fetchDashboardData}
-            initialTab="schemes"
-          />
-        );
-
-      case 'welfare_applications':
-        return (
-          <AdminWelfareSchemes
-            schemes={welfareSchemes}
-            applications={welfareApps}
-            onRefresh={fetchDashboardData}
-            initialTab="applications"
           />
         );
 
@@ -299,13 +272,11 @@ export default function AdminDashboard({ user, onLogout }) {
 
             {/* 4. ADMIN ACTION QUEUE & RECENT SYSTEM ACTIVITIES */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Left 2 Cols: Admin Action Queue (Caregiver Verification & Welfare Applications ONLY) */}
+              {/* Left 2 Cols: Admin Action Queue (Caregiver Verification Queue) */}
               <div className="lg:col-span-2">
                 <AdminActionQueue
                   pendingCaregivers={pendingCaregivers}
-                  pendingWelfareApps={welfareApps.filter((a) => a.status === 'Submitted')}
                   onReviewCaregiver={(cg) => setReviewCaregiverModal(cg)}
-                  onReviewWelfareApp={() => setCurrentView('welfare_applications')}
                   onNavigate={setCurrentView}
                 />
               </div>
@@ -341,7 +312,7 @@ export default function AdminDashboard({ user, onLogout }) {
           onOpenMobile={() => setIsMobileSidebarOpen(true)}
           onLogout={onLogout}
           onNavigateView={setCurrentView}
-          pendingAlertCount={pendingCaregivers.length + pendingWelfareCount}
+          pendingAlertCount={safePendingCaregivers.length}
         />
 
         {/* Main Body */}

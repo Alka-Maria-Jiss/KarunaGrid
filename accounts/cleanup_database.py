@@ -44,7 +44,6 @@ from care_coordination.models import (
 )
 from resources.models import (
     WelfareScheme,
-    WelfareApplication,
     EquipmentType,
     EquipmentUnit,
     EquipmentRequest,
@@ -91,8 +90,7 @@ def perform_database_cleanup():
         TelemedicineConsultation.objects.all().delete()
         CaregiverPatientAssignment.objects.all().delete()
 
-        print("3. Deleting Resource Requests, Applications & Catalog Data...")
-        WelfareApplication.objects.all().delete()
+        print("3. Deleting Resource Requests & Catalog Data...")
         EquipmentRequest.objects.all().delete()
         EquipmentUnit.objects.all().delete()
         EquipmentType.objects.all().delete()

@@ -12,7 +12,6 @@ const viewTitles = {
   all_users: 'User Account Management',
   caregiver_verification: 'Caregiver Verification Queue',
   welfare_schemes: 'Government Welfare Schemes',
-  welfare_applications: 'Welfare Scheme Applications',
   equipment: 'Equipment & Inventory Management',
   notifications: 'System Notification Oversight',
   reports: 'Palliative Care Reports',
@@ -69,7 +68,11 @@ export default function AdminHeader({
       {/* Right: Notifications & Admin Profile */}
       <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
         {/* Real-time Notification Dropdown */}
-        <NotificationDropdown />
+        <NotificationDropdown
+          onViewAll={() => onNavigateView && onNavigateView('notifications')}
+          buttonClassName="relative p-2.5 rounded-2xl border border-[#e9e2d5] bg-[#fdfbf7] hover:bg-[#f4ede0] text-[#4a473d] transition-all cursor-pointer shadow-2xs"
+          iconClassName="w-4 h-4"
+        />
 
         {/* Admin Profile Dropdown */}
         <div className="relative" ref={profileMenuRef}>

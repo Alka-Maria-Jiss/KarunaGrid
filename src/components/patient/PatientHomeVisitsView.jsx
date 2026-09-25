@@ -63,8 +63,17 @@ export default function PatientHomeVisitsView({
     }
   };
 
-  const upcomingOccurrences = occurrences.filter((o) => o.status === 'Scheduled' || o.status === 'Pending' || o.status === 'Rescheduled');
-  const pastOccurrences = occurrences.filter((o) => o.status === 'Completed' || o.status === 'Skipped');
+  const parseVisitDate = (occ) => {
+    if (!occ) return 0;
+    if (occ.raw_date) return new Date(occ.raw_date).getTime();
+    if (occ.scheduled_date) return new Date(occ.scheduled_date).getTime();
+    return 0;
+  };
+
+  const sortedOccurrences = [...occurrences].sort((a, b) => parseVisitDate(a) - parseVisitDate(b));
+
+  const upcomingOccurrences = sortedOccurrences.filter((o) => o.status === 'Scheduled' || o.status === 'Pending' || o.status === 'Rescheduled');
+  const pastOccurrences = sortedOccurrences.filter((o) => o.status === 'Completed' || o.status === 'Skipped');
 
   const displayList = activeTab === 'upcoming' ? upcomingOccurrences : pastOccurrences;
 

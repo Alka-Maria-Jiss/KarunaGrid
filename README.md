@@ -1,16 +1,98 @@
-# React + Vite
+# KarunaGrid — Community Palliative Care Network
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+KarunaGrid coordinates community palliative care between patients, caregivers, doctors, and nurses with compassion, comfort, and dignity at home.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Sign in with Google (Google Identity Services) Setup
 
-## React Compiler
+KarunaGrid supports **Sign in with Google** for existing approved users (Patients, Doctors, Nurses, Caregivers, and Administrators).
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 1. Google Cloud Console Configuration
 
-## Expanding the Oxlint configuration
+To enable Google Sign-In for development:
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+1. Go to the [Google Cloud Console](https://console.cloud.google.com/).
+2. Create a new project or select an existing project.
+3. Navigate to **APIs & Services** > **OAuth consent screen**:
+   - Select **External** (or Internal for Google Workspace).
+   - Fill in the App name (e.g., `KarunaGrid`), User support email, and Developer contact information.
+   - Add scopes: `.../auth/userinfo.email`, `.../auth/userinfo.profile`, `openid`.
+4. Navigate to **APIs & Services** > **Credentials**:
+   - Click **Create Credentials** > **OAuth client ID**.
+   - Choose **Web application** as the application type.
+   - Under **Authorized JavaScript origins**, add:
+     - `http://localhost:5173`
+     - `http://127.0.0.1:5173`
+     - (Add production frontend URL when deploying to production)
+   - Click **Create** and copy the generated **Client ID**.
+
+### 2. Environment Variables
+
+Add the Google OAuth Client ID to your `.env` file:
+
+```env
+# Backend Google Token Verification
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+
+# Frontend Google Identity Services Client
+VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+```
+
+> **Note**: The client ID is public and safe to expose in the frontend (`VITE_GOOGLE_CLIENT_ID`). Never expose or commit a Client Secret.
+
+---
+
+## Authentication Flow
+
+```text
+1. User clicks "Sign in with Google" on /login
+2. Google Identity Services (GIS) UI authenticates Google account
+3. Frontend receives Google ID token credential
+4. Frontend sends POST /api/auth/google/ { credential }
+5. Backend verifies token signature, audience, issuer, expiration, and verified email status
+6. Backend matches verified email to existing KarunaGrid User (case-insensitive)
+7. Backend verifies account active status and role-specific approval requirements
+8. Backend generates standard SimpleJWT tokens (access & refresh)
+9. Frontend stores JWT tokens and redirects to the appropriate role dashboard
+```
+
+---
+
+## Running the Application
+
+### Backend (Django)
+
+```bash
+# Install dependencies
+pip install -r requirements.txt
+
+# Run migrations
+python manage.py migrate
+
+# Run system check
+python manage.py check
+
+# Run tests
+python manage.py test accounts --settings=test_settings
+
+# Start development server
+python manage.py runserver 8000
+```
+
+### Frontend (React + Vite)
+
+```bash
+# Install dependencies
+npm install
+
+# Start development server
+npm run dev
+
+# Build production bundle
+npm run build
+
+# Run linter
+npm run lint
+```
+

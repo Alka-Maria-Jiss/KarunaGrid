@@ -1,9 +1,16 @@
 import mimetypes
 import re
+import secrets
+import logging
 from datetime import datetime, timedelta, date
+from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
+from django.utils.html import escape
 from django.http import FileResponse
 from django.core.files.storage import default_storage
+from django.core.mail import send_mail
+from django.contrib.auth.hashers import make_password, check_password
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import status
@@ -13,6 +20,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.views import TokenRefreshView
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+logger = logging.getLogger(__name__)
 
 from .models import (
     User,
@@ -26,18 +37,25 @@ from .models import (
     Doctor,
     Nurse,
     Administrator,
+    PasswordResetOTP,
 )
 from .serializers import (
     PatientRegisterSerializer,
     CaregiverRegisterSerializer,
     PublicApplicationStatusSerializer,
     LoginSerializer,
+    GoogleAuthSerializer,
     PendingPatientSerializer,
     PendingCaregiverSerializer,
     AdminStaffCreateSerializer,
     AdminOnboardDoctorSerializer,
     AdminOnboardNurseSerializer,
+    ForgotPasswordRequestSerializer,
+    VerifyOtpSerializer,
+    ResendOtpSerializer,
+    ResetPasswordSerializer,
 )
+
 from .notifications import create_status_notification
 
 
@@ -77,6 +95,104 @@ class RegisterView(APIView):
             )
 
 
+def check_user_approval_and_get_profile(user):
+    """
+    Validates user active status and role-specific approval requirements.
+    Returns (profile_name, error_response) tuple.
+    """
+    if not user.is_active:
+        return None, Response(
+            {"detail": "Your account has been disabled. Please contact support."},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    profile_name = user.email
+    role = user.role
+
+    if role == Role.PATIENT:
+        patient = getattr(user, 'patient', None)
+        if not patient or patient.registration_status == RegistrationStatus.PENDING:
+            return None, Response(
+                {"detail": "Your account is pending administrator approval."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        elif patient.registration_status == RegistrationStatus.REJECTED:
+            reason = patient.rejection_reason or "No reason provided."
+            return None, Response(
+                {
+                    "detail": "Your account registration was rejected by an administrator.",
+                    "rejection_reason": reason,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if patient:
+            profile_name = patient.name
+
+    elif role == Role.CAREGIVER:
+        caregiver = getattr(user, 'caregiver', None)
+        if not caregiver or caregiver.verification_status == VerificationStatus.PENDING:
+            return None, Response(
+                {"detail": "Your account is pending administrator approval."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        elif caregiver.verification_status == VerificationStatus.REJECTED:
+            reason = caregiver.rejection_reason or "No reason provided."
+            return None, Response(
+                {
+                    "detail": "Your account verification was rejected by an administrator.",
+                    "rejection_reason": reason,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if caregiver:
+            profile_name = caregiver.name
+
+    elif role == Role.DOCTOR:
+        doctor = getattr(user, 'doctor', None)
+        if not doctor or doctor.verification_status == VerificationStatus.PENDING:
+            return None, Response(
+                {"detail": "Your account is pending administrator approval."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        elif doctor.verification_status == VerificationStatus.REJECTED:
+            reason = doctor.rejection_reason or "No reason provided."
+            return None, Response(
+                {
+                    "detail": "Your account verification was rejected by an administrator.",
+                    "rejection_reason": reason,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if doctor:
+            profile_name = f"Dr. {doctor.name}"
+
+    elif role == Role.NURSE:
+        nurse = getattr(user, 'nurse', None)
+        if not nurse or nurse.verification_status == VerificationStatus.PENDING:
+            return None, Response(
+                {"detail": "Your account is pending administrator approval."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        elif nurse.verification_status == VerificationStatus.REJECTED:
+            reason = nurse.rejection_reason or "No reason provided."
+            return None, Response(
+                {
+                    "detail": "Your account verification was rejected by an administrator.",
+                    "rejection_reason": reason,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if nurse:
+            profile_name = f"Nurse {nurse.name}"
+
+    elif role == Role.ADMIN:
+        admin_obj = getattr(user, 'administrator', None)
+        if admin_obj:
+            profile_name = admin_obj.name
+
+    return profile_name, None
+
+
 class LoginView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [ScopedRateThrottle]
@@ -88,97 +204,9 @@ class LoginView(APIView):
             return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.validated_data['user']
-
-        if not user.is_active:
-            return Response(
-                {"detail": "Your account has been disabled. Please contact support."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        # Check approval gate depending on role
-        profile_name = user.email
-        role = user.role
-
-        if role == Role.PATIENT:
-            patient = getattr(user, 'patient', None)
-            if not patient or patient.registration_status == RegistrationStatus.PENDING:
-                return Response(
-                    {"detail": "Your account is pending administrator approval."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            elif patient.registration_status == RegistrationStatus.REJECTED:
-                reason = patient.rejection_reason or "No reason provided."
-                return Response(
-                    {
-                        "detail": "Your account registration was rejected by an administrator.",
-                        "rejection_reason": reason,
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            if patient:
-                profile_name = patient.name
-
-        elif role == Role.CAREGIVER:
-            caregiver = getattr(user, 'caregiver', None)
-            if not caregiver or caregiver.verification_status == VerificationStatus.PENDING:
-                return Response(
-                    {"detail": "Your account is pending administrator approval."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            elif caregiver.verification_status == VerificationStatus.REJECTED:
-                reason = caregiver.rejection_reason or "No reason provided."
-                return Response(
-                    {
-                        "detail": "Your account verification was rejected by an administrator.",
-                        "rejection_reason": reason,
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            if caregiver:
-                profile_name = caregiver.name
-
-        elif role == Role.DOCTOR:
-            doctor = getattr(user, 'doctor', None)
-            if not doctor or doctor.verification_status == VerificationStatus.PENDING:
-                return Response(
-                    {"detail": "Your account is pending administrator approval."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            elif doctor.verification_status == VerificationStatus.REJECTED:
-                reason = doctor.rejection_reason or "No reason provided."
-                return Response(
-                    {
-                        "detail": "Your account verification was rejected by an administrator.",
-                        "rejection_reason": reason,
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            if doctor:
-                profile_name = f"Dr. {doctor.name}"
-
-        elif role == Role.NURSE:
-            nurse = getattr(user, 'nurse', None)
-            if not nurse or nurse.verification_status == VerificationStatus.PENDING:
-                return Response(
-                    {"detail": "Your account is pending administrator approval."},
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            elif nurse.verification_status == VerificationStatus.REJECTED:
-                reason = nurse.rejection_reason or "No reason provided."
-                return Response(
-                    {
-                        "detail": "Your account verification was rejected by an administrator.",
-                        "rejection_reason": reason,
-                    },
-                    status=status.HTTP_403_FORBIDDEN,
-                )
-            if nurse:
-                profile_name = f"Nurse {nurse.name}"
-
-        elif role == Role.ADMIN:
-            admin_obj = getattr(user, 'administrator', None)
-            if admin_obj:
-                profile_name = admin_obj.name
+        profile_name, error_response = check_user_approval_and_get_profile(user)
+        if error_response:
+            return error_response
 
         # Issue JWT tokens
         refresh = RefreshToken.for_user(user)
@@ -195,6 +223,449 @@ class LoginView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+
+class GoogleAuthView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'login'
+
+    def post(self, request, *args, **kwargs):
+        serializer = GoogleAuthSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        credential = serializer.validated_data['credential']
+        google_client_id = getattr(settings, 'GOOGLE_CLIENT_ID', '') or ''
+
+        try:
+            # Verify the Google ID token cryptographically
+            id_info = id_token.verify_oauth2_token(
+                credential,
+                google_requests.Request(),
+                audience=google_client_id if google_client_id else None,
+            )
+
+            # Validate issuer
+            issuer = id_info.get('iss')
+            if issuer not in ['accounts.google.com', 'https://accounts.google.com']:
+                return Response(
+                    {"detail": "Google authentication failed. Invalid token issuer."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            # Validate verified email requirement
+            email_verified = id_info.get('email_verified')
+            if email_verified not in (True, 'true', 'True'):
+                return Response(
+                    {"detail": "Google account email is not verified. Please verify your email with Google."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+            email = id_info.get('email')
+            if not email:
+                return Response(
+                    {"detail": "Google authentication failed. No email provided in credential."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        except ValueError:
+            return Response(
+                {"detail": "Google authentication failed. Please try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        except Exception:
+            return Response(
+                {"detail": "Google authentication service error. Please try again later."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Look up existing user by verified email
+        user = User.objects.filter(email__iexact=email).first()
+
+        if not user:
+            # Check if there is a pending or rejected PatientRegistrationApplication
+            app_exists = PatientRegistrationApplication.objects.filter(email__iexact=email).exists()
+            if app_exists:
+                return Response(
+                    {"detail": "Your KarunaGrid account is not available for Google Sign-In yet. Please complete the existing registration and approval process."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+            return Response(
+                {"detail": "No eligible KarunaGrid account was found for this Google account. Please use the registration process first."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Check approval gate and active status
+        profile_name, error_response = check_user_approval_and_get_profile(user)
+        if error_response:
+            return error_response
+
+        # Issue standard SimpleJWT tokens
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                "access": str(refresh.access_token),
+                "refresh": str(refresh),
+                "user": {
+                    "user_id": user.user_id,
+                    "email": user.email,
+                    "role": user.role,
+                    "name": profile_name,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+def find_user_by_username(username):
+    """
+    Finds an existing User by email or patient registration_id (case-insensitive).
+    A pending/rejected PatientRegistrationApplication without an active User account is not returned.
+    """
+    if not username:
+        return None
+    username_clean = str(username).strip()
+    # 1. By email
+    user = User.objects.filter(email__iexact=username_clean).first()
+    if user:
+        return user
+    # 2. By patient registration_id
+    patient = Patient.objects.filter(registration_id__iexact=username_clean).select_related('user').first()
+    if patient and patient.user:
+        return patient.user
+    return None
+
+
+def generate_secure_otp():
+    """Generates a secure 6-digit numeric OTP."""
+    return f"{secrets.randbelow(900000) + 100000}"
+
+
+def send_password_reset_otp_email(to_email, otp):
+    """
+    Sends the password-reset OTP email using configured Django email backend.
+    """
+    subject = "KarunaGrid Password Reset OTP"
+    text_content = f"""Hello,
+
+We received a request to reset your KarunaGrid password.
+
+Your verification OTP is:
+
+{otp}
+
+This OTP is valid for 10 minutes and can only be used once.
+
+If you did not request a password reset, you can safely ignore this email.
+
+Regards,
+KarunaGrid
+Community Palliative Care Coordination Platform"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fff9ef; margin: 0; padding: 20px; color: #1e1b14; }}
+.card {{ background-color: #ffffff; max-width: 520px; margin: 0 auto; border-radius: 16px; border: 1px solid #cbc6ba; padding: 32px; box-shadow: 0 4px 16px rgba(100, 94, 69, 0.08); }}
+.brand {{ font-size: 20px; font-weight: 800; color: #645e45; margin-bottom: 20px; }}
+.otp-box {{ background-color: #f4ede0; border: 1px dashed #645e45; border-radius: 12px; padding: 18px; text-align: center; margin: 24px 0; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #1e1b14; }}
+.footer {{ font-size: 12px; color: #7b776c; margin-top: 32px; border-top: 1px solid #eee7da; padding-top: 16px; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">KarunaGrid</div>
+  <p>Hello,</p>
+  <p>We received a request to reset your KarunaGrid password.</p>
+  <p>Your verification OTP is:</p>
+  <div class="otp-box">{escape(otp)}</div>
+  <p>This OTP is valid for <strong>10 minutes</strong> and can only be used once.</p>
+  <p>If you did not request a password reset, you can safely ignore this email.</p>
+  <div class="footer">
+    Regards,<br>
+    <strong>KarunaGrid</strong><br>
+    Community Palliative Care Coordination Platform
+  </div>
+</div>
+</body>
+</html>"""
+
+    print(f"\n==================================================", flush=True)
+    print(f"[KARUNAGRID OTP EMAIL] To: {to_email} | Verification OTP: {otp}", flush=True)
+    print(f"==================================================\n", flush=True)
+
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
+    send_mail(
+        subject=subject,
+        message=text_content,
+        from_email=from_email,
+        recipient_list=[to_email],
+        html_message=html_content,
+        fail_silently=False,
+    )
+
+
+class ForgotPasswordRequestView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_request'
+
+    GENERIC_SUCCESS_MSG = "If an account exists for this username, a verification OTP has been sent to the registered email address."
+
+    def post(self, request, *args, **kwargs):
+        serializer = ForgotPasswordRequestSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        username = serializer.validated_data['username']
+        user = find_user_by_username(username)
+
+        if user:
+            # Invalidate any existing unused OTPs for this user
+            PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+            otp = generate_secure_otp()
+            otp_hash = make_password(otp)
+            expires_at = timezone.now() + timedelta(minutes=10)
+
+            PasswordResetOTP.objects.create(
+                user=user,
+                otp_hash=otp_hash,
+                expires_at=expires_at,
+                is_used=False,
+                is_verified=False,
+                attempt_count=0
+            )
+
+            try:
+                send_password_reset_otp_email(user.email, otp)
+            except Exception as e:
+                logger.error(f"[ForgotPasswordRequest] Email sending error to {user.email}: {e}", exc_info=True)
+                return Response(
+                    {"detail": "We couldn't send the verification email right now. Please try again later."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+        return Response(
+            {"message": self.GENERIC_SUCCESS_MSG},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ForgotPasswordResendOtpView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_request'
+
+    GENERIC_RESEND_MSG = "If an account exists for this username, a new OTP has been sent."
+
+    def post(self, request, *args, **kwargs):
+        serializer = ResendOtpSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        username = serializer.validated_data['username']
+        user = find_user_by_username(username)
+
+        if user:
+            # Enforce 60-second cooldown
+            recent_otp = PasswordResetOTP.objects.filter(
+                user=user
+            ).order_by('-created_at').first()
+
+            if recent_otp and (timezone.now() - recent_otp.created_at).total_seconds() < 60:
+                cooldown_remaining = 60 - int((timezone.now() - recent_otp.created_at).total_seconds())
+                return Response(
+                    {
+                        "detail": f"Please wait {cooldown_remaining} seconds before requesting a new OTP.",
+                        "retry_after": cooldown_remaining
+                    },
+                    status=status.HTTP_429_TOO_MANY_REQUESTS,
+                )
+
+            # Invalidate previous OTPs
+            PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+            otp = generate_secure_otp()
+            otp_hash = make_password(otp)
+            expires_at = timezone.now() + timedelta(minutes=10)
+
+            PasswordResetOTP.objects.create(
+                user=user,
+                otp_hash=otp_hash,
+                expires_at=expires_at,
+                is_used=False,
+                is_verified=False,
+                attempt_count=0
+            )
+
+            try:
+                send_password_reset_otp_email(user.email, otp)
+            except Exception as e:
+                logger.error(f"[ForgotPasswordResend] Email sending error to {user.email}: {e}", exc_info=True)
+                return Response(
+                    {"detail": "We couldn't send the verification email right now. Please try again later."},
+                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                )
+
+        return Response(
+            {"message": self.GENERIC_RESEND_MSG},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ForgotPasswordVerifyOtpView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_verify'
+
+    def post(self, request, *args, **kwargs):
+        serializer = VerifyOtpSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        username = serializer.validated_data['username']
+        otp = serializer.validated_data['otp']
+
+        user = find_user_by_username(username)
+        if not user:
+            return Response(
+                {"detail": "Invalid OTP. Please try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        otp_record = PasswordResetOTP.objects.filter(
+            user=user,
+            is_used=False
+        ).order_by('-created_at').first()
+
+        if not otp_record:
+            return Response(
+                {"detail": "Invalid OTP. Please try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if otp_record.is_verified:
+            return Response(
+                {"detail": "This OTP has already been verified."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if timezone.now() > otp_record.expires_at:
+            otp_record.is_used = True
+            otp_record.save(update_fields=['is_used'])
+            return Response(
+                {"detail": "This OTP has expired. Please request a new OTP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if otp_record.attempt_count >= 5:
+            otp_record.is_used = True
+            otp_record.save(update_fields=['is_used'])
+            return Response(
+                {"detail": "Too many incorrect attempts. Please request a new OTP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not check_password(otp, otp_record.otp_hash):
+            otp_record.attempt_count += 1
+            if otp_record.attempt_count >= 5:
+                otp_record.is_used = True
+                otp_record.save(update_fields=['attempt_count', 'is_used'])
+                return Response(
+                    {"detail": "Too many incorrect attempts. Please request a new OTP."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            otp_record.save(update_fields=['attempt_count'])
+            return Response(
+                {"detail": "Invalid OTP. Please try again."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Correct OTP: generate cryptographically secure reset token
+        reset_token = secrets.token_urlsafe(48)
+        otp_record.is_verified = True
+        otp_record.reset_token_hash = make_password(reset_token)
+        otp_record.token_expires_at = timezone.now() + timedelta(minutes=15)
+        otp_record.save(update_fields=['is_verified', 'reset_token_hash', 'token_expires_at'])
+
+        return Response(
+            {
+                "message": "OTP verified successfully.",
+                "reset_token": reset_token,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class ForgotPasswordResetView(APIView):
+    permission_classes = [AllowAny]
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = 'password_reset_action'
+
+    def post(self, request, *args, **kwargs):
+        serializer = ResetPasswordSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        reset_token = serializer.validated_data['reset_token']
+        new_password = serializer.validated_data['new_password']
+
+        candidate_records = PasswordResetOTP.objects.filter(
+            is_verified=True,
+            is_used=False,
+            token_expires_at__gt=timezone.now()
+        ).select_related('user')
+
+        matched_record = None
+        for record in candidate_records:
+            if record.reset_token_hash and check_password(reset_token, record.reset_token_hash):
+                matched_record = record
+                break
+
+        if not matched_record:
+            return Response(
+                {"detail": "Invalid or expired reset token. Please request a new OTP."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        user = matched_record.user
+
+        try:
+            validate_password(new_password, user=user)
+        except DjangoValidationError as e:
+            return Response(
+                {"errors": {"new_password": list(e.messages)}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        with transaction.atomic():
+            user.set_password(new_password)
+            user.save()
+
+            matched_record.is_used = True
+            matched_record.save(update_fields=['is_used'])
+            PasswordResetOTP.objects.filter(user=user, is_used=False).update(is_used=True)
+
+            # Invalidate all outstanding SimpleJWT tokens for this user
+            try:
+                from rest_framework_simplejwt.token_blacklist.models import OutstandingToken, BlacklistedToken
+                tokens = OutstandingToken.objects.filter(user=user)
+                for tok in tokens:
+                    BlacklistedToken.objects.get_or_create(token=tok)
+            except Exception as e:
+                logger.warning(f"Could not blacklist tokens for user {user.user_id}: {e}")
+
+        return Response(
+            {
+                "message": "Password updated successfully. Please log in with your new password.",
+            },
+            status=status.HTTP_200_OK,
+        )
+
 
 
 import mimetypes
@@ -824,14 +1295,16 @@ class AdminOnboardNurseView(APIView):
 # PHASE 1 ADMINISTRATOR DASHBOARD & MANAGEMENT VIEWS
 # ============================================================================
 
+from django.db import transaction
 from resources.models import (
     WelfareScheme,
-    WelfareApplication,
+    WelfareSchemeStatus,
     EquipmentType,
     EquipmentUnit,
     EquipmentRequest,
-    WelfareApplicationStatus,
     EquipmentUnitStatus,
+    DoctorApprovalStatus,
+    DeliveryStatus,
 )
 from care_coordination.models import TelemedicineConsultation, HomeVisitOccurrence
 from medical_records.models import LabReport
@@ -1016,8 +1489,8 @@ class AdminStatsView(APIView):
         total_caregivers = Caregiver.objects.count()
 
         pending_caregivers = Caregiver.objects.filter(verification_status=VerificationStatus.PENDING).count()
-        pending_welfare_apps = WelfareApplication.objects.filter(status=WelfareApplicationStatus.SUBMITTED).count()
-        pending_admin_actions = pending_caregivers + pending_welfare_apps
+        published_welfare_schemes = WelfareScheme.objects.filter(status=WelfareSchemeStatus.PUBLISHED).count()
+        pending_admin_actions = pending_caregivers
 
         # Equipment Status Overview
         total_units = EquipmentUnit.objects.count()
@@ -1072,7 +1545,7 @@ class AdminStatsView(APIView):
         # Administrative Donut Chart Overview
         donut_data = [
             {"name": "Caregiver Verifications", "value": max(1, pending_caregivers + Caregiver.objects.filter(verification_status=VerificationStatus.APPROVED).count()), "color": "#645e45"},
-            {"name": "Welfare Applications", "value": max(1, WelfareApplication.objects.count()), "color": "#8a9a86"},
+            {"name": "Published Welfare Schemes", "value": max(1, published_welfare_schemes), "color": "#8a9a86"},
             {"name": "Active Users", "value": max(1, active_users_count), "color": "#b5ad8f"},
             {"name": "Equipment Allocation", "value": max(1, allocated_units + available_units), "color": "#695e3d"},
         ]
@@ -1085,7 +1558,7 @@ class AdminStatsView(APIView):
                 "total_caregivers": total_caregivers,
                 "pending_admin_actions": pending_admin_actions,
                 "pending_caregivers": pending_caregivers,
-                "pending_welfare_apps": pending_welfare_apps,
+                "published_welfare_schemes": published_welfare_schemes,
             },
             "equipment_overview": {
                 "total_units": total_units,
@@ -1328,17 +1801,19 @@ class AdminActivityLogView(APIView):
                 "color": "beige",
             })
 
-        # 3. Welfare Applications
-        for w in WelfareApplication.objects.select_related('patient', 'scheme').all().order_by('-submitted_at')[:5]:
+        # 3. Welfare Schemes
+        for w in WelfareScheme.objects.all().order_by('-updated_at')[:5]:
+            badge_status = w.status
+            color = "olive" if w.status == WelfareSchemeStatus.PUBLISHED else "beige"
             activities.append({
-                "id": f"welf_{w.application_id}",
-                "type": "welfare_application",
-                "title": "Welfare Scheme Application",
-                "description": f"Application submitted by {w.patient.name} for '{w.scheme.name}'.",
-                "timestamp": w.submitted_at.strftime('%d %b %Y, %H:%M'),
-                "raw_time": w.submitted_at,
-                "badge": w.status,
-                "color": "rose",
+                "id": f"scheme_{w.scheme_id}",
+                "type": "welfare_scheme",
+                "title": f"Welfare Scheme {w.status}",
+                "description": f"Scheme '{w.name}' ({w.category}) - {w.status}.",
+                "timestamp": w.updated_at.strftime('%d %b %Y, %H:%M'),
+                "raw_time": w.updated_at,
+                "badge": badge_status,
+                "color": color,
             })
 
         # 4. Equipment allocations
@@ -1364,7 +1839,7 @@ class AdminActivityLogView(APIView):
 
 class AdminWelfareSchemeListView(APIView):
     """
-    List and create government welfare schemes.
+    List and create government welfare schemes with full status lifecycle and redirection URL support.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1372,16 +1847,41 @@ class AdminWelfareSchemeListView(APIView):
         if request.user.role != Role.ADMIN:
             return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
 
+        status_param = request.query_params.get('status', '').strip()
+        category_param = request.query_params.get('category', '').strip()
+        search_query = request.query_params.get('search', '').strip()
+
         schemes = WelfareScheme.objects.all().order_by('-created_at')
+
+        if status_param and status_param.lower() != 'all':
+            schemes = schemes.filter(status__iexact=status_param)
+        if category_param and category_param.lower() != 'all':
+            schemes = schemes.filter(category__iexact=category_param)
+        if search_query:
+            schemes = schemes.filter(
+                models.Q(name__icontains=search_query) |
+                models.Q(description__icontains=search_query) |
+                models.Q(benefits__icontains=search_query) |
+                models.Q(government_department__icontains=search_query)
+            )
+
         results = [
             {
                 "scheme_id": s.scheme_id,
                 "name": s.name,
-                "description": s.description,
-                "eligibility_criteria": s.eligibility_criteria,
-                "required_documents": s.required_documents,
-                "application_link": s.application_link,
-                "created_at": s.created_at.strftime('%d %b %Y'),
+                "category": s.category,
+                "description": s.description or '',
+                "benefits": s.benefits or '',
+                "eligibility_criteria": s.eligibility_criteria or '',
+                "required_documents": s.required_documents or '',
+                "application_instructions": s.application_instructions or '',
+                "official_application_url": s.official_application_url or '',
+                "government_department": s.government_department or '',
+                "contact_info": s.contact_info or '',
+                "status": s.status,
+                "published_at": s.published_at.strftime('%d %b %Y, %H:%M') if s.published_at else None,
+                "created_at": s.created_at.strftime('%d %b %Y, %H:%M'),
+                "updated_at": s.updated_at.strftime('%d %b %Y, %H:%M'),
             }
             for s in schemes
         ]
@@ -1392,13 +1892,39 @@ class AdminWelfareSchemeListView(APIView):
             return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
 
         name = request.data.get('name', '').strip()
+        category = request.data.get('category', 'Financial Aid').strip() or 'Financial Aid'
         description = request.data.get('description', '').strip()
+        benefits = request.data.get('benefits', '').strip()
         eligibility = request.data.get('eligibility_criteria', '').strip()
         required_docs = request.data.get('required_documents', '').strip()
-        app_link = request.data.get('application_link', '').strip()
+        instructions = request.data.get('application_instructions', '').strip()
+        official_url = request.data.get('official_application_url', '').strip()
+        department = request.data.get('government_department', '').strip()
+        contact_info = request.data.get('contact_info', '').strip()
+        req_status = request.data.get('status', WelfareSchemeStatus.DRAFT).strip()
 
         if not name:
             return Response({"errors": {"name": ["Scheme name is required."]}}, status=status.HTTP_400_BAD_REQUEST)
+
+        # URL validation: if provided, must be a valid HTTP/HTTPS URL
+        if official_url:
+            if not (official_url.startswith('http://') or official_url.startswith('https://')):
+                return Response({
+                    "errors": {"official_application_url": ["Official URL must be a valid HTTP or HTTPS web address."]}
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate status choice
+        if req_status not in [WelfareSchemeStatus.DRAFT, WelfareSchemeStatus.PUBLISHED, WelfareSchemeStatus.UNPUBLISHED]:
+            req_status = WelfareSchemeStatus.DRAFT
+
+        # Rule: If status is Published, an official government application URL is mandatory
+        published_at = None
+        if req_status == WelfareSchemeStatus.PUBLISHED:
+            if not official_url:
+                return Response({
+                    "errors": {"official_application_url": ["An official government application URL is required to publish a scheme."]}
+                }, status=status.HTTP_400_BAD_REQUEST)
+            published_at = timezone.now()
 
         admin_obj = getattr(request.user, 'administrator', None)
         if not admin_obj:
@@ -1406,24 +1932,58 @@ class AdminWelfareSchemeListView(APIView):
 
         scheme = WelfareScheme.objects.create(
             name=name,
+            category=category,
             description=description,
+            benefits=benefits,
             eligibility_criteria=eligibility,
             required_documents=required_docs,
-            application_link=app_link,
+            application_instructions=instructions,
+            official_application_url=official_url,
+            government_department=department,
+            contact_info=contact_info,
+            status=req_status,
+            published_at=published_at,
             created_by_admin=admin_obj,
         )
 
         return Response({
-            "message": f"Welfare Scheme '{scheme.name}' created successfully.",
+            "message": f"Welfare Scheme '{scheme.name}' created successfully as {scheme.status}.",
             "scheme_id": scheme.scheme_id,
+            "status": scheme.status,
         }, status=status.HTTP_201_CREATED)
 
 
 class AdminWelfareSchemeDetailView(APIView):
     """
-    Update or delete a government welfare scheme.
+    Retrieve, update, publish, unpublish, or delete a government welfare scheme.
     """
     permission_classes = [IsAuthenticated]
+
+    def get(self, request, scheme_id, *args, **kwargs):
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        scheme = WelfareScheme.objects.filter(scheme_id=scheme_id).first()
+        if not scheme:
+            return Response({"detail": "Scheme not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "scheme_id": scheme.scheme_id,
+            "name": scheme.name,
+            "category": scheme.category,
+            "description": scheme.description or '',
+            "benefits": scheme.benefits or '',
+            "eligibility_criteria": scheme.eligibility_criteria or '',
+            "required_documents": scheme.required_documents or '',
+            "application_instructions": scheme.application_instructions or '',
+            "official_application_url": scheme.official_application_url or '',
+            "government_department": scheme.government_department or '',
+            "contact_info": scheme.contact_info or '',
+            "status": scheme.status,
+            "published_at": scheme.published_at.strftime('%d %b %Y, %H:%M') if scheme.published_at else None,
+            "created_at": scheme.created_at.strftime('%d %b %Y, %H:%M'),
+            "updated_at": scheme.updated_at.strftime('%d %b %Y, %H:%M'),
+        }, status=status.HTTP_200_OK)
 
     def put(self, request, scheme_id, *args, **kwargs):
         if request.user.role != Role.ADMIN:
@@ -1433,14 +1993,57 @@ class AdminWelfareSchemeDetailView(APIView):
         if not scheme:
             return Response({"detail": "Scheme not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        scheme.name = request.data.get('name', scheme.name).strip()
-        scheme.description = request.data.get('description', scheme.description).strip()
-        scheme.eligibility_criteria = request.data.get('eligibility_criteria', scheme.eligibility_criteria).strip()
-        scheme.required_documents = request.data.get('required_documents', scheme.required_documents).strip()
-        scheme.application_link = request.data.get('application_link', scheme.application_link).strip()
+        name = request.data.get('name', scheme.name).strip()
+        if not name:
+            return Response({"errors": {"name": ["Scheme name is required."]}}, status=status.HTTP_400_BAD_REQUEST)
+
+        category = request.data.get('category', scheme.category).strip() or scheme.category
+        description = request.data.get('description', scheme.description or '').strip()
+        benefits = request.data.get('benefits', scheme.benefits or '').strip()
+        eligibility = request.data.get('eligibility_criteria', scheme.eligibility_criteria or '').strip()
+        required_docs = request.data.get('required_documents', scheme.required_documents or '').strip()
+        instructions = request.data.get('application_instructions', scheme.application_instructions or '').strip()
+        official_url = request.data.get('official_application_url', scheme.official_application_url or '').strip()
+        department = request.data.get('government_department', scheme.government_department or '').strip()
+        contact_info = request.data.get('contact_info', scheme.contact_info or '').strip()
+        new_status = request.data.get('status', scheme.status).strip()
+
+        # URL validation: if provided, must be valid HTTP/HTTPS
+        if official_url:
+            if not (official_url.startswith('http://') or official_url.startswith('https://')):
+                return Response({
+                    "errors": {"official_application_url": ["Official URL must be a valid HTTP or HTTPS web address."]}
+                }, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate status change
+        if new_status in [WelfareSchemeStatus.DRAFT, WelfareSchemeStatus.PUBLISHED, WelfareSchemeStatus.UNPUBLISHED]:
+            if new_status == WelfareSchemeStatus.PUBLISHED:
+                if not official_url:
+                    return Response({
+                        "errors": {"official_application_url": ["An official government application URL is required to publish a scheme."]}
+                    }, status=status.HTTP_400_BAD_REQUEST)
+                # Set publication timestamp if newly published
+                if scheme.status != WelfareSchemeStatus.PUBLISHED or not scheme.published_at:
+                    scheme.published_at = timezone.now()
+            scheme.status = new_status
+
+        scheme.name = name
+        scheme.category = category
+        scheme.description = description
+        scheme.benefits = benefits
+        scheme.eligibility_criteria = eligibility
+        scheme.required_documents = required_docs
+        scheme.application_instructions = instructions
+        scheme.official_application_url = official_url
+        scheme.government_department = department
+        scheme.contact_info = contact_info
         scheme.save()
 
-        return Response({"message": f"Welfare Scheme '{scheme.name}' updated successfully."}, status=status.HTTP_200_OK)
+        return Response({
+            "message": f"Welfare Scheme '{scheme.name}' updated successfully.",
+            "scheme_id": scheme.scheme_id,
+            "status": scheme.status,
+        }, status=status.HTTP_200_OK)
 
     def delete(self, request, scheme_id, *args, **kwargs):
         if request.user.role != Role.ADMIN:
@@ -1455,76 +2058,9 @@ class AdminWelfareSchemeDetailView(APIView):
         return Response({"message": f"Welfare Scheme '{scheme_name}' deleted successfully."}, status=status.HTTP_200_OK)
 
 
-class AdminWelfareApplicationListView(APIView):
-    """
-    Lists submitted welfare applications for Administrator review.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        if request.user.role != Role.ADMIN:
-            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
-
-        apps = WelfareApplication.objects.select_related('patient', 'scheme', 'submitted_by').all().order_by('-submitted_at')
-        results = [
-            {
-                "application_id": a.application_id,
-                "patient_name": a.patient.name,
-                "patient_registration_id": a.patient.registration_id,
-                "patient_phone": a.patient.phone,
-                "scheme_name": a.scheme.name,
-                "status": a.status,
-                "remarks": a.remarks,
-                "submitted_documents": a.submitted_documents,
-                "submitted_at": a.submitted_at.strftime('%d %b %Y'),
-            }
-            for a in apps
-        ]
-        return Response(results, status=status.HTTP_200_OK)
-
-
-class AdminWelfareApplicationReviewView(APIView):
-    """
-    Allows Administrator to update status and add remarks to a welfare application.
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, application_id, *args, **kwargs):
-        if request.user.role != Role.ADMIN:
-            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
-
-        app_obj = WelfareApplication.objects.filter(application_id=application_id).first()
-        if not app_obj:
-            return Response({"detail": "Application not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        new_status = request.data.get('status', '').strip()
-        remarks = request.data.get('remarks', '').strip()
-
-        if new_status in [WelfareApplicationStatus.UNDER_REVIEW, WelfareApplicationStatus.APPROVED, WelfareApplicationStatus.REJECTED]:
-            app_obj.status = new_status
-        if remarks:
-            app_obj.remarks = remarks
-
-        if hasattr(request.user, 'administrator'):
-            app_obj.reviewed_by_admin = request.user.administrator
-        app_obj.save()
-
-        # Send notification to patient
-        Notification.objects.create(
-            user=app_obj.patient.user,
-            type="welfare_application_update",
-            message=f"Your application for '{app_obj.scheme.name}' has been updated to: {app_obj.status}.",
-        )
-
-        return Response({
-            "message": f"Welfare Application #{app_obj.application_id} updated to {app_obj.status}.",
-            "status": app_obj.status,
-        }, status=status.HTTP_200_OK)
-
-
 class AdminEquipmentListView(APIView):
     """
-    Lists equipment types, inventory units, and allocation stats.
+    Lists equipment types, inventory units, patient equipment requests, and allocation stats.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1544,6 +2080,7 @@ class AdminEquipmentListView(APIView):
                 "available": units.filter(status=EquipmentUnitStatus.AVAILABLE).count(),
                 "allocated": units.filter(status=EquipmentUnitStatus.ALLOCATED).count(),
                 "maintenance": units.filter(status=EquipmentUnitStatus.MAINTENANCE).count(),
+                "retired": units.filter(status=EquipmentUnitStatus.RETIRED).count(),
             })
 
         units_qs = EquipmentUnit.objects.select_related('equipment_type').all().order_by('-updated_at')
@@ -1559,9 +2096,34 @@ class AdminEquipmentListView(APIView):
             for u in units_qs
         ]
 
+        requests_qs = EquipmentRequest.objects.select_related(
+            'patient', 'equipment_type', 'approved_by_doctor', 'allocated_unit', 'allocated_by_admin'
+        ).all().order_by('-requested_at')
+        requests_data = [
+            {
+                "request_id": r.request_id,
+                "patient_id": r.patient.patient_id,
+                "patient_name": r.patient.name,
+                "patient_reg_id": r.patient.registration_id,
+                "equipment_type_id": r.equipment_type.equipment_type_id,
+                "equipment_type_name": r.equipment_type.name,
+                "requested_at": r.requested_at.strftime('%d %b %Y, %H:%M'),
+                "doctor_approval_status": r.doctor_approval_status,
+                "approved_by_doctor_name": r.approved_by_doctor.name if r.approved_by_doctor else None,
+                "delivery_status": r.delivery_status,
+                "allocated_unit_id": r.allocated_unit.unit_id if r.allocated_unit else None,
+                "allocated_unit_serial": r.allocated_unit.serial_number if r.allocated_unit else None,
+                "allocated_by_admin_name": r.allocated_by_admin.name if r.allocated_by_admin else None,
+                "returned_at": r.returned_at.strftime('%d %b %Y, %H:%M') if r.returned_at else None,
+                "updated_at": r.updated_at.strftime('%d %b %Y, %H:%M') if r.updated_at else None,
+            }
+            for r in requests_qs
+        ]
+
         return Response({
             "types": types_data,
             "units": units_data,
+            "requests": requests_data,
         }, status=status.HTTP_200_OK)
 
 
@@ -1618,9 +2180,243 @@ class AdminEquipmentUnitCreateView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+class AdminEquipmentAllocateView(APIView):
+    """
+    Allocate or reassign an available physical equipment unit and update delivery status
+    for clinically approved patient equipment requests.
+    Enforces transactional concurrency with select_for_update() row locking.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, request_id, *args, **kwargs):
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        unit_id = request.data.get('unit_id')
+        if not unit_id:
+            return Response({"errors": {"unit_id": ["Physical Equipment Unit ID is required."]}}, status=status.HTTP_400_BAD_REQUEST)
+
+        with transaction.atomic():
+            eq_request = EquipmentRequest.objects.select_for_update().filter(request_id=request_id).first()
+            if not eq_request:
+                return Response({"detail": "Equipment request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            if eq_request.doctor_approval_status != DoctorApprovalStatus.APPROVED:
+                return Response(
+                    {"detail": "Equipment request must be clinically approved by a doctor before physical equipment allocation."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if eq_request.delivery_status != DeliveryStatus.REQUESTED:
+                return Response(
+                    {"detail": f"Equipment request is already {eq_request.delivery_status}."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if eq_request.allocated_unit_id is not None:
+                return Response(
+                    {"detail": "An equipment unit has already been allocated to this request."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            unit = EquipmentUnit.objects.select_for_update().filter(unit_id=unit_id).first()
+            if not unit:
+                return Response({"detail": "Equipment unit not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            if unit.equipment_type_id != eq_request.equipment_type_id:
+                return Response(
+                    {"detail": "Selected equipment unit does not match the requested equipment category."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if unit.status != EquipmentUnitStatus.AVAILABLE:
+                return Response(
+                    {"detail": "This equipment unit is no longer available. Please select another unit."},
+                    status=status.HTTP_409_CONFLICT
+                )
+
+            admin_profile = getattr(request.user, 'administrator', None) or Administrator.objects.filter(user=request.user).first()
+
+            # Transition unit: Available -> Allocated
+            unit.status = EquipmentUnitStatus.ALLOCATED
+            unit.save(update_fields=['status', 'updated_at'])
+
+            # Transition request: Requested -> Allocated, assign unit and admin
+            eq_request.allocated_unit = unit
+            eq_request.allocated_by_admin = admin_profile
+            eq_request.delivery_status = DeliveryStatus.ALLOCATED
+            eq_request.save(update_fields=['allocated_unit', 'allocated_by_admin', 'delivery_status', 'updated_at'])
+
+            return Response({
+                "message": f"Unit '{unit.serial_number}' successfully allocated to patient {eq_request.patient.name}.",
+                "request_id": eq_request.request_id,
+                "patient_name": eq_request.patient.name,
+                "equipment_type_name": eq_request.equipment_type.name,
+                "doctor_approval_status": eq_request.doctor_approval_status,
+                "delivery_status": eq_request.delivery_status,
+                "allocated_unit_id": unit.unit_id,
+                "allocated_unit_serial": unit.serial_number,
+                "allocated_by_admin_name": admin_profile.name if admin_profile else "Administrator",
+                "returned_at": None,
+                "updated_at": eq_request.updated_at.strftime('%d %b %Y, %H:%M'),
+            }, status=status.HTTP_200_OK)
+
+    def patch(self, request, request_id, *args, **kwargs):
+        """
+        Edit an allocated equipment request: reassign physical unit, update delivery status
+        (Allocated, Delivered, Returned), and manage unit availability.
+        Admin CANNOT modify doctor_approval_status or clinical approval decisions.
+        """
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        with transaction.atomic():
+            eq_request = EquipmentRequest.objects.select_for_update().select_related(
+                'patient', 'equipment_type', 'allocated_unit', 'allocated_by_admin'
+            ).filter(request_id=request_id).first()
+
+            if not eq_request:
+                return Response({"detail": "Equipment request not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            if eq_request.doctor_approval_status != DoctorApprovalStatus.APPROVED:
+                return Response(
+                    {"detail": "Only clinically approved equipment requests can be administratively edited or allocated."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            admin_profile = getattr(request.user, 'administrator', None) or Administrator.objects.filter(user=request.user).first()
+            update_fields = ['updated_at']
+
+            # 1. Handle Unit Reassignment if unit_id is provided
+            unit_id = request.data.get('unit_id')
+            if unit_id is not None and str(unit_id).strip() != '':
+                unit_id = int(unit_id)
+                current_unit_id = eq_request.allocated_unit_id
+
+                if unit_id != current_unit_id:
+                    new_unit = EquipmentUnit.objects.select_for_update().filter(unit_id=unit_id).first()
+                    if not new_unit:
+                        return Response({"detail": "Selected equipment unit not found."}, status=status.HTTP_404_NOT_FOUND)
+
+                    if new_unit.equipment_type_id != eq_request.equipment_type_id:
+                        return Response(
+                            {"detail": "Selected equipment unit does not match the requested equipment category."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    if new_unit.status != EquipmentUnitStatus.AVAILABLE:
+                        return Response(
+                            {"detail": "This equipment unit is no longer available. Please select another unit."},
+                            status=status.HTTP_409_CONFLICT
+                        )
+
+                    # Release old unit if one was previously allocated
+                    if current_unit_id:
+                        old_unit = EquipmentUnit.objects.select_for_update().filter(unit_id=current_unit_id).first()
+                        if old_unit:
+                            old_unit.status = EquipmentUnitStatus.AVAILABLE
+                            old_unit.save(update_fields=['status', 'updated_at'])
+
+                    # Mark new unit as ALLOCATED
+                    new_unit.status = EquipmentUnitStatus.ALLOCATED
+                    new_unit.save(update_fields=['status', 'updated_at'])
+
+                    eq_request.allocated_unit = new_unit
+                    eq_request.allocated_by_admin = admin_profile
+                    update_fields.extend(['allocated_unit', 'allocated_by_admin'])
+
+            # 2. Handle Delivery Status Transitions
+            raw_delivery_status = request.data.get('delivery_status')
+            if raw_delivery_status:
+                status_mapping = {
+                    'requested': DeliveryStatus.REQUESTED,
+                    'allocated': DeliveryStatus.ALLOCATED,
+                    'delivered': DeliveryStatus.DELIVERED,
+                    'returned': DeliveryStatus.RETURNED,
+                }
+                normalized_status = status_mapping.get(str(raw_delivery_status).strip().lower())
+                if not normalized_status:
+                    return Response(
+                        {"errors": {"delivery_status": [f"Invalid delivery status '{raw_delivery_status}'. Valid choices are: Requested, Allocated, Delivered, Returned."]}},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                if normalized_status == DeliveryStatus.RETURNED:
+                    # Equipment returned: Mark returned_at and free the allocated physical unit back to Available stock
+                    eq_request.delivery_status = DeliveryStatus.RETURNED
+                    eq_request.returned_at = timezone.now()
+                    update_fields.extend(['delivery_status', 'returned_at'])
+
+                    if eq_request.allocated_unit_id:
+                        unit_to_release = EquipmentUnit.objects.select_for_update().filter(unit_id=eq_request.allocated_unit_id).first()
+                        if unit_to_release and unit_to_release.status == EquipmentUnitStatus.ALLOCATED:
+                            unit_to_release.status = EquipmentUnitStatus.AVAILABLE
+                            unit_to_release.save(update_fields=['status', 'updated_at'])
+
+                elif normalized_status in [DeliveryStatus.ALLOCATED, DeliveryStatus.DELIVERED]:
+                    # Transition to Allocated or Delivered
+                    if eq_request.allocated_unit_id is None:
+                        return Response(
+                            {"detail": f"Cannot set delivery status to '{normalized_status}' without allocating a physical equipment unit."},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+
+                    # If previously marked Returned, re-ensure the physical unit is locked as Allocated
+                    if eq_request.delivery_status == DeliveryStatus.RETURNED:
+                        unit_to_lock = EquipmentUnit.objects.select_for_update().filter(unit_id=eq_request.allocated_unit_id).first()
+                        if unit_to_lock:
+                            if unit_to_lock.status not in [EquipmentUnitStatus.AVAILABLE, EquipmentUnitStatus.ALLOCATED]:
+                                return Response(
+                                    {"detail": f"The allocated unit '{unit_to_lock.serial_number}' is currently {unit_to_lock.status} and cannot be reactivated."},
+                                    status=status.HTTP_409_CONFLICT
+                                )
+                            unit_to_lock.status = EquipmentUnitStatus.ALLOCATED
+                            unit_to_lock.save(update_fields=['status', 'updated_at'])
+                        eq_request.returned_at = None
+                        update_fields.append('returned_at')
+
+                    eq_request.delivery_status = normalized_status
+                    eq_request.allocated_by_admin = admin_profile
+                    update_fields.extend(['delivery_status', 'allocated_by_admin'])
+
+                elif normalized_status == DeliveryStatus.REQUESTED:
+                    # Reset back to Requested -> Release allocated unit
+                    if eq_request.allocated_unit_id:
+                        unit_to_release = EquipmentUnit.objects.select_for_update().filter(unit_id=eq_request.allocated_unit_id).first()
+                        if unit_to_release:
+                            unit_to_release.status = EquipmentUnitStatus.AVAILABLE
+                            unit_to_release.save(update_fields=['status', 'updated_at'])
+                    eq_request.allocated_unit = None
+                    eq_request.delivery_status = DeliveryStatus.REQUESTED
+                    eq_request.returned_at = None
+                    update_fields.extend(['allocated_unit', 'delivery_status', 'returned_at'])
+
+            # Always ensure allocated_by_admin is recorded
+            if admin_profile and 'allocated_by_admin' not in update_fields:
+                eq_request.allocated_by_admin = admin_profile
+                update_fields.append('allocated_by_admin')
+
+            eq_request.save(update_fields=list(set(update_fields)))
+
+            return Response({
+                "message": "Equipment allocation details updated successfully.",
+                "request_id": eq_request.request_id,
+                "patient_name": eq_request.patient.name,
+                "equipment_type_name": eq_request.equipment_type.name,
+                "doctor_approval_status": eq_request.doctor_approval_status,
+                "delivery_status": eq_request.delivery_status,
+                "allocated_unit_id": eq_request.allocated_unit.unit_id if eq_request.allocated_unit else None,
+                "allocated_unit_serial": eq_request.allocated_unit.serial_number if eq_request.allocated_unit else None,
+                "allocated_by_admin_name": eq_request.allocated_by_admin.name if eq_request.allocated_by_admin else "Administrator",
+                "returned_at": eq_request.returned_at.strftime('%d %b %Y, %H:%M') if eq_request.returned_at else None,
+                "updated_at": eq_request.updated_at.strftime('%d %b %Y, %H:%M'),
+            }, status=status.HTTP_200_OK)
+
+
 class AdminEquipmentUnitStatusUpdateView(APIView):
     """
     Update the operational status of an equipment unit (Available, Allocated, Maintenance, Retired).
+    Guards against manual bypass of patient allocation, corruption of active allocations, and reviving retired units.
     """
     permission_classes = [IsAuthenticated]
 
@@ -1632,13 +2428,60 @@ class AdminEquipmentUnitStatusUpdateView(APIView):
         if not unit:
             return Response({"detail": "Equipment unit not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        new_status = request.data.get('status', '').strip()
-        if new_status in [EquipmentUnitStatus.AVAILABLE, EquipmentUnitStatus.ALLOCATED, EquipmentUnitStatus.MAINTENANCE, EquipmentUnitStatus.RETIRED]:
-            unit.status = new_status
-            unit.save()
-            return Response({"message": f"Unit '{unit.serial_number}' status updated to {unit.status}.", "status": unit.status}, status=status.HTTP_200_OK)
+        raw_status = str(request.data.get('status', '')).strip()
+        status_map = {
+            'available': EquipmentUnitStatus.AVAILABLE,
+            'available in stock': EquipmentUnitStatus.AVAILABLE,
+            'allocated': EquipmentUnitStatus.ALLOCATED,
+            'allocated to patient': EquipmentUnitStatus.ALLOCATED,
+            'maintenance': EquipmentUnitStatus.MAINTENANCE,
+            'under maintenance': EquipmentUnitStatus.MAINTENANCE,
+            'under maintenance / repair': EquipmentUnitStatus.MAINTENANCE,
+            'under maintenance/repair': EquipmentUnitStatus.MAINTENANCE,
+            'retired': EquipmentUnitStatus.RETIRED,
+            'retired / out of service': EquipmentUnitStatus.RETIRED,
+            'retired/out of service': EquipmentUnitStatus.RETIRED,
+        }
 
-        return Response({"detail": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
+        new_status = status_map.get(raw_status.lower(), raw_status)
+
+        if new_status not in [EquipmentUnitStatus.AVAILABLE, EquipmentUnitStatus.ALLOCATED, EquipmentUnitStatus.MAINTENANCE, EquipmentUnitStatus.RETIRED]:
+            return Response({"detail": "Invalid status value."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Rule A: Manual allocation bypass prevention
+        if new_status == EquipmentUnitStatus.ALLOCATED and unit.status != EquipmentUnitStatus.ALLOCATED:
+            return Response(
+                {"detail": "Direct manual allocation is not permitted. Units must be assigned via doctor-approved patient equipment requests."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Rule B: Protect active patient allocation
+        if unit.status == EquipmentUnitStatus.ALLOCATED and new_status != EquipmentUnitStatus.ALLOCATED:
+            has_active_request = EquipmentRequest.objects.filter(
+                allocated_unit=unit,
+                delivery_status__in=[DeliveryStatus.ALLOCATED, DeliveryStatus.DELIVERED]
+            ).exists()
+            if has_active_request:
+                return Response(
+                    {"detail": "This equipment unit is currently allocated to an active patient request and cannot be manually changed. Process equipment return first."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Rule C: Retired units cannot be revived to Available
+        if unit.status == EquipmentUnitStatus.RETIRED and new_status == EquipmentUnitStatus.AVAILABLE:
+            return Response(
+                {"detail": "Retired equipment units cannot be reactivated directly to Available."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        unit.status = new_status
+        unit.save()
+        return Response({
+            "message": f"Unit '{unit.serial_number}' status updated to {unit.status}.",
+            "status": unit.status,
+            "unit_id": unit.unit_id,
+            "updated_at": unit.updated_at.strftime('%d %b %Y'),
+        }, status=status.HTTP_200_OK)
 
 
 class AdminNotificationOverviewView(APIView):
@@ -1705,7 +2548,7 @@ class PatientDashboardView(APIView):
         )
         from resources.models import (
             WelfareScheme,
-            WelfareApplication,
+            WelfareSchemeStatus,
             EquipmentRequest,
         )
 
@@ -1878,24 +2721,6 @@ class PatientDashboardView(APIView):
                 "raw_date": str(er.requested_at),
             })
 
-        for wa in WelfareApplication.objects.filter(patient=patient).order_by('-submitted_at')[:2]:
-            my_requests.append({
-                "id": f"welf-{wa.application_id}",
-                "type": f"Welfare: {wa.scheme.name if wa.scheme else 'Aid Scheme'}",
-                "date": wa.submitted_at.strftime('%d %b %Y'),
-                "status": wa.status,
-                "raw_date": str(wa.submitted_at),
-            })
-
-        for tr in TelemedicineConsultation.objects.filter(patient=patient).order_by('-created_at')[:2]:
-            my_requests.append({
-                "id": f"tele-req-{tr.consultation_id}",
-                "type": "Telemedicine Request",
-                "date": tr.created_at.strftime('%d %b %Y'),
-                "status": tr.status,
-                "raw_date": str(tr.created_at),
-            })
-
         my_requests.sort(key=lambda x: x.get('raw_date', ''), reverse=True)
         my_requests = my_requests[:4]
 
@@ -1981,7 +2806,7 @@ class PatientDashboardView(APIView):
             "upcoming_care": upcoming_care,
             "my_requests": my_requests,
             "timeline": timeline_events,
-            "available_schemes_count": WelfareScheme.objects.count(),
+            "available_schemes_count": WelfareScheme.objects.filter(status=WelfareSchemeStatus.PUBLISHED).count(),
         }
 
         return Response(payload, status=status.HTTP_200_OK)
@@ -2467,7 +3292,7 @@ class PatientHomeVisitsView(APIView):
 
         occurrences = HomeVisitOccurrence.objects.select_related(
             'allocated_nurse', 'visiting_doctor'
-        ).prefetch_related('homevisitsummary__visitsymptom_set').filter(patient=patient).order_by('-scheduled_date')
+        ).prefetch_related('homevisitsummary__visitsymptom_set').filter(patient=patient).order_by('scheduled_date')
 
         occurrences_data = []
         for occ in occurrences:
@@ -2623,7 +3448,8 @@ class PatientEquipmentView(APIView):
 
 class PatientWelfareView(APIView):
     """
-    Government welfare schemes catalog and patient applications.
+    Government welfare schemes discovery and official redirection portal for Patients.
+    Only schemes with status='Published' are returned.
     """
     permission_classes = [IsAuthenticated]
 
@@ -2632,67 +3458,44 @@ class PatientWelfareView(APIView):
         if not patient:
             return Response({"detail": "Access restricted to Patients only."}, status=status.HTTP_403_FORBIDDEN)
 
-        from resources.models import WelfareScheme, WelfareApplication
+        from resources.models import WelfareScheme, WelfareSchemeStatus
+
+        category_param = request.query_params.get('category', '').strip()
+        search_query = request.query_params.get('search', '').strip()
+
+        schemes_qs = WelfareScheme.objects.filter(status=WelfareSchemeStatus.PUBLISHED).order_by('-published_at', '-created_at')
+
+        if category_param and category_param.lower() != 'all':
+            schemes_qs = schemes_qs.filter(category__iexact=category_param)
+        if search_query:
+            schemes_qs = schemes_qs.filter(
+                models.Q(name__icontains=search_query) |
+                models.Q(description__icontains=search_query) |
+                models.Q(benefits__icontains=search_query) |
+                models.Q(government_department__icontains=search_query)
+            )
 
         schemes = [
             {
                 "scheme_id": s.scheme_id,
                 "name": s.name,
-                "description": s.description,
-                "eligibility_criteria": s.eligibility_criteria,
-                "required_documents": s.required_documents,
-                "application_link": s.application_link,
+                "category": s.category,
+                "description": s.description or '',
+                "benefits": s.benefits or '',
+                "eligibility_criteria": s.eligibility_criteria or '',
+                "required_documents": s.required_documents or '',
+                "application_instructions": s.application_instructions or '',
+                "official_application_url": s.official_application_url or '',
+                "government_department": s.government_department or '',
+                "contact_info": s.contact_info or '',
+                "published_at": s.published_at.strftime('%d %b %Y') if s.published_at else None,
             }
-            for s in WelfareScheme.objects.all()
-        ]
-
-        my_applications = [
-            {
-                "application_id": wa.application_id,
-                "scheme_id": wa.scheme.scheme_id if wa.scheme else None,
-                "scheme_name": wa.scheme.name if wa.scheme else "Welfare Scheme",
-                "status": wa.status,
-                "remarks": wa.remarks,
-                "submitted_documents": wa.submitted_documents,
-                "submitted_at": wa.submitted_at.strftime('%d %b %Y'),
-            }
-            for wa in WelfareApplication.objects.filter(patient=patient).order_by('-submitted_at')
+            for s in schemes_qs
         ]
 
         return Response({
             "schemes": schemes,
-            "my_applications": my_applications,
         }, status=status.HTTP_200_OK)
-
-    def post(self, request, *args, **kwargs):
-        patient = get_authenticated_patient(request)
-        if not patient:
-            return Response({"detail": "Access restricted to Patients only."}, status=status.HTTP_403_FORBIDDEN)
-
-        from resources.models import WelfareScheme, WelfareApplication, ApplicationStatus
-
-        scheme_id = request.data.get('scheme_id')
-        if not scheme_id:
-            return Response({"detail": "Welfare scheme ID is required."}, status=status.HTTP_400_BAD_REQUEST)
-
-        scheme = WelfareScheme.objects.filter(scheme_id=scheme_id).first()
-        if not scheme:
-            return Response({"detail": "Welfare scheme not found."}, status=status.HTTP_404_NOT_FOUND)
-
-        submitted_documents = request.data.get('submitted_documents', '').strip()
-
-        application = WelfareApplication.objects.create(
-            patient=patient,
-            scheme=scheme,
-            submitted_by=request.user,
-            status=ApplicationStatus.SUBMITTED,
-            submitted_documents=submitted_documents or "Application details submitted via portal",
-        )
-
-        return Response({
-            "message": f"Application for '{scheme.name}' submitted successfully. The administrator will review your application.",
-            "application_id": application.application_id,
-        }, status=status.HTTP_201_CREATED)
 
 
 class PatientCaregiverView(APIView):
@@ -2749,7 +3552,7 @@ class PatientTimelineView(APIView):
 
         from care_coordination.models import TelemedicineConsultation, HomeVisitOccurrence
         from medical_records.models import Prescription, LabReport
-        from resources.models import EquipmentRequest, WelfareApplication
+        from resources.models import EquipmentRequest
 
         events = []
 
@@ -2842,17 +3645,6 @@ class PatientTimelineView(APIView):
                 "description": f"Doctor clinical status: {eq.doctor_approval_status}, delivery: {eq.delivery_status}.",
                 "status": eq.doctor_approval_status,
                 "raw_date": str(eq.requested_at),
-            })
-
-        # 8. Welfare
-        for wa in WelfareApplication.objects.filter(patient=patient):
-            events.append({
-                "category": "Welfare Aid",
-                "event": f"Application: {wa.scheme.name if wa.scheme else 'Scheme'}",
-                "date": wa.submitted_at.strftime('%d %b %Y'),
-                "description": f"Application status: {wa.status}.",
-                "status": wa.status,
-                "raw_date": str(wa.submitted_at),
             })
 
         events.sort(key=lambda x: x.get('raw_date', ''), reverse=True)

@@ -321,3 +321,224 @@ class PatientRegistrationLifecycleTests(TestCase):
 
         # Verify only 1 user created
         self.assertEqual(User.objects.filter(email=email).count(), 1)
+
+
+class PatientRegistrationStepValidationTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.pdf_content = b"%PDF-1.4 test discharge summary document content"
+
+    def _get_valid_payload(self):
+        pdf_file = SimpleUploadedFile(
+            'discharge_summary.pdf',
+            self.pdf_content,
+            content_type='application/pdf'
+        )
+        return {
+            'role': 'patient',
+            'name': 'John Doe',
+            'email': 'john.doe@example.com',
+            'password': 'Password@1',
+            'confirm_password': 'Password@1',
+            'dob': '2000-05-10',
+            'gender': 'Male',
+            'phone': '9876543210',
+            'house_name': 'Green Villa',
+            'place': 'Town Center',
+            'panchayath': 'Central Panchayath',
+            'ward_no': 5,
+            'pincode': '682001',
+            'discharge_summary': pdf_file,
+            'emergency_contact_name': '',
+            'emergency_contact_phone': '',
+        }
+
+    # STEP 1: Full Name Validations
+    def test_name_numeric_rejected(self):
+        payload = self._get_valid_payload()
+        payload['name'] = 'John123'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('name', res.data.get('errors', {}))
+
+    def test_name_special_chars_rejected(self):
+        payload = self._get_valid_payload()
+        payload['name'] = 'John@Doe'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('name', res.data.get('errors', {}))
+
+    def test_name_valid_accepted(self):
+        payload = self._get_valid_payload()
+        payload['name'] = "Mary-Jane O'Connor"
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    # STEP 1: Phone Validations
+    def test_phone_short_rejected(self):
+        payload = self._get_valid_payload()
+        payload['phone'] = '98765'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('phone', res.data.get('errors', {}))
+
+    def test_phone_valid_accepted(self):
+        payload = self._get_valid_payload()
+        payload['phone'] = '9876543210'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+    # STEP 1: Password Complexity Validations
+    def test_password_no_upper_rejected(self):
+        payload = self._get_valid_payload()
+        payload['password'] = 'password@1'
+        payload['confirm_password'] = 'password@1'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password', res.data.get('errors', {}))
+
+    def test_password_no_lower_rejected(self):
+        payload = self._get_valid_payload()
+        payload['password'] = 'PASSWORD@1'
+        payload['confirm_password'] = 'PASSWORD@1'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password', res.data.get('errors', {}))
+
+    def test_password_no_digit_rejected(self):
+        payload = self._get_valid_payload()
+        payload['password'] = 'Password@'
+        payload['confirm_password'] = 'Password@'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password', res.data.get('errors', {}))
+
+    def test_password_no_special_rejected(self):
+        payload = self._get_valid_payload()
+        payload['password'] = 'Password123'
+        payload['confirm_password'] = 'Password123'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password', res.data.get('errors', {}))
+
+    def test_password_too_short_rejected(self):
+        payload = self._get_valid_payload()
+        payload['password'] = 'Pass@1'
+        payload['confirm_password'] = 'Pass@1'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('password', res.data.get('errors', {}))
+
+    def test_password_mismatch_rejected(self):
+        payload = self._get_valid_payload()
+        payload['password'] = 'Password@1'
+        payload['confirm_password'] = 'DifferentPassword@1'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('confirm_password', res.data.get('errors', {}))
+
+    # STEP 1: DOB Validations
+    def test_dob_future_rejected(self):
+        payload = self._get_valid_payload()
+        payload['dob'] = '2099-01-01'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('dob', res.data.get('errors', {}))
+
+    def test_dob_too_old_rejected(self):
+        payload = self._get_valid_payload()
+        payload['dob'] = '1890-01-01'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('dob', res.data.get('errors', {}))
+
+    # STEP 1: Emergency Contact Validations
+    def test_emergency_contact_invalid_name_rejected(self):
+        payload = self._get_valid_payload()
+        payload['emergency_contact_name'] = 'Jane123'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('emergency_contact_name', res.data.get('errors', {}))
+
+    def test_emergency_contact_invalid_phone_rejected(self):
+        payload = self._get_valid_payload()
+        payload['emergency_contact_phone'] = '98765'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('emergency_contact_phone', res.data.get('errors', {}))
+
+    # STEP 2: House Name
+    def test_house_name_numeric_rejected(self):
+        payload = self._get_valid_payload()
+        payload['house_name'] = 'Green123'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('house_name', res.data.get('errors', {}))
+
+    def test_house_name_special_rejected(self):
+        payload = self._get_valid_payload()
+        payload['house_name'] = 'Green@Villa'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('house_name', res.data.get('errors', {}))
+
+    # STEP 2: Place
+    def test_place_numeric_rejected(self):
+        payload = self._get_valid_payload()
+        payload['place'] = 'Town123'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('place', res.data.get('errors', {}))
+
+    def test_place_special_rejected(self):
+        payload = self._get_valid_payload()
+        payload['place'] = 'Town@Center'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('place', res.data.get('errors', {}))
+
+    # STEP 2: Panchayath
+    def test_panchayath_numeric_rejected(self):
+        payload = self._get_valid_payload()
+        payload['panchayath'] = 'Central123'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('panchayath', res.data.get('errors', {}))
+
+    # STEP 2: Ward No
+    def test_ward_zero_rejected(self):
+        payload = self._get_valid_payload()
+        payload['ward_no'] = 0
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('ward_no', res.data.get('errors', {}))
+
+    def test_ward_negative_rejected(self):
+        payload = self._get_valid_payload()
+        payload['ward_no'] = -5
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('ward_no', res.data.get('errors', {}))
+
+    # STEP 2: Pincode
+    def test_pincode_short_rejected(self):
+        payload = self._get_valid_payload()
+        payload['pincode'] = '68200'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('pincode', res.data.get('errors', {}))
+
+    def test_pincode_long_rejected(self):
+        payload = self._get_valid_payload()
+        payload['pincode'] = '6820012'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('pincode', res.data.get('errors', {}))
+
+    def test_pincode_alpha_rejected(self):
+        payload = self._get_valid_payload()
+        payload['pincode'] = '68A001'
+        res = self.client.post('/api/auth/register/', payload, format='multipart')
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('pincode', res.data.get('errors', {}))
+

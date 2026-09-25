@@ -55,12 +55,6 @@ export default function AdminSidebar({
           badge: pendingCounts.caregivers > 0 ? pendingCounts.caregivers : null,
         },
         { id: 'welfare_schemes', label: 'Welfare Schemes', icon: ScrollText },
-        {
-          id: 'welfare_applications',
-          label: 'Welfare Applications',
-          icon: FileCheck2,
-          badge: pendingCounts.welfare > 0 ? pendingCounts.welfare : null,
-        },
         { id: 'equipment', label: 'Equipment Management', icon: Boxes },
         { id: 'notifications', label: 'Notifications', icon: Bell },
       ],

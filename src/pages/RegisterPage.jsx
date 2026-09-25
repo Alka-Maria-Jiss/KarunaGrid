@@ -80,71 +80,194 @@ export default function RegisterPage({ onNavigate }) {
     }
   };
 
-  // Step 2 Client Validations
-  const validateStep2 = () => {
-    const errors = {};
-    if (!name.trim()) errors.name = ['Full Name is required.'];
-    if (!email.trim()) errors.email = ['Email Address is required.'];
+  const focusFirstInvalidField = (errors) => {
+    const fieldOrder = [
+      'name',
+      'email',
+      'phone',
+      'password',
+      'confirm_password',
+      'dob',
+      'gender',
+      'emergency_contact_name',
+      'emergency_contact_phone',
+      'house_name',
+      'place',
+      'panchayath',
+      'ward_no',
+      'pincode',
+      'discharge_summary',
+      'identity_proof',
+    ];
 
-    if (!phone.trim()) {
-      errors.phone = ['Phone number is required.'];
-    } else if (!/^\d{10}$/.test(phone.trim())) {
-      errors.phone = ['Phone number must be a valid 10-digit number.'];
+    for (const key of fieldOrder) {
+      if (errors[key]) {
+        setTimeout(() => {
+          const el = document.getElementById(`field-${key}`);
+          if (el) {
+            el.focus();
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }
+        }, 50);
+        break;
+      }
+    }
+  };
+
+  // STEP 1 / Step 2 Wizard - Personal & Account Details Validations
+  const validateStep1 = () => {
+    const errors = {};
+    const trimmedName = name.trim();
+    const trimmedEmail = email.trim();
+    const trimmedPhone = phone.trim();
+
+    // 1. Full Name
+    if (!trimmedName) {
+      errors.name = ['Full name is required.'];
+    } else if (trimmedName.length > 100) {
+      errors.name = ['Full name cannot exceed 100 characters.'];
+    } else if (!/^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/.test(trimmedName)) {
+      errors.name = ['Full name can contain only letters, spaces, hyphens, and apostrophes.'];
     }
 
+    // 2. Email Address
+    if (!trimmedEmail) {
+      errors.email = ['Email address is required.'];
+    } else if (trimmedEmail.length > 150) {
+      errors.email = ['Email address cannot exceed 150 characters.'];
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      errors.email = ['Please enter a valid email address.'];
+    }
+
+    // 3. Phone Number
+    if (!trimmedPhone) {
+      errors.phone = ['Phone number is required.'];
+    } else if (!/^\d{10}$/.test(trimmedPhone)) {
+      errors.phone = ['Phone number must be exactly 10 digits.'];
+    }
+
+    // 4. Password
     if (!password) {
       errors.password = ['Password is required.'];
+    } else if (!/^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password)) {
+      errors.password = [
+        'Password must be at least 8 characters and include uppercase, lowercase, number, and special character.'
+      ];
     }
-    if (password !== confirmPassword) {
+
+    // 5. Confirm Password
+    if (!confirmPassword) {
+      errors.confirm_password = ['Confirm password is required.'];
+    } else if (password !== confirmPassword) {
       errors.confirm_password = ['Passwords do not match.'];
     }
 
+    // Patient Specific Fields
     if (selectedRole === 'patient') {
+      // 6. Date of Birth
       if (!dob) {
         errors.dob = ['Date of birth is required.'];
       } else {
         const dobDate = new Date(dob);
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
         if (dobDate >= today) {
-          errors.dob = ['Date of birth must be a past date.'];
+          errors.dob = ['Date of birth must be in the past.'];
+        } else {
+          let age = today.getFullYear() - dobDate.getFullYear();
+          const m = today.getMonth() - dobDate.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < dobDate.getDate())) {
+            age--;
+          }
+          if (age > 120) {
+            errors.dob = ['Age cannot exceed 120 years.'];
+          }
         }
       }
 
-      if (!gender) {
+      // 7. Gender
+      if (!gender || !gender.trim()) {
         errors.gender = ['Gender is required.'];
+      } else if (!['Male', 'Female'].includes(gender.trim())) {
+        errors.gender = ['Please select a valid gender option.'];
       }
 
-      if (emergencyContactPhone.trim() && !/^\d{10}$/.test(emergencyContactPhone.trim())) {
-        errors.emergency_contact_phone = ['Emergency contact phone number must be a 10-digit number.'];
+      // 8. Emergency Contact Name (Optional)
+      const trimmedEcName = emergencyContactName.trim();
+      if (trimmedEcName) {
+        if (trimmedEcName.length > 100) {
+          errors.emergency_contact_name = ['Emergency contact name cannot exceed 100 characters.'];
+        } else if (!/^[A-Za-z]+(?:[ '-][A-Za-z]+)*$/.test(trimmedEcName)) {
+          errors.emergency_contact_name = ['Emergency contact name can contain only letters, spaces, hyphens, and apostrophes.'];
+        }
+      }
+
+      // 9. Emergency Contact Phone (Optional)
+      const trimmedEcPhone = emergencyContactPhone.trim();
+      if (trimmedEcPhone) {
+        if (!/^\d{10}$/.test(trimmedEcPhone)) {
+          errors.emergency_contact_phone = ['Emergency contact phone must be exactly 10 digits.'];
+        }
       }
     }
 
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    return errors;
   };
 
-  // Step 3 Client Validations
-  const validateStep3 = () => {
+  // STEP 2 / Step 3 Wizard - Address Details Validations
+  const validateAddressStep = () => {
     const errors = {};
-    if (!houseName.trim()) errors.house_name = ['House Name is required.'];
-    if (!place.trim()) errors.place = ['Place is required.'];
-    if (!panchayath.trim()) errors.panchayath = ['Panchayath is required.'];
+    const trimmedHouse = houseName.trim();
+    const trimmedPlace = place.trim();
+    const trimmedPanchayath = panchayath.trim();
+    const trimmedWard = String(wardNo).trim();
+    const trimmedPincode = pincode.trim();
 
-    if (!wardNo || parseInt(wardNo, 10) <= 0) {
-      errors.ward_no = ['Ward number must be a positive integer.'];
+    // 10. House Name
+    if (!trimmedHouse) {
+      errors.house_name = ['House name is required.'];
+    } else if (trimmedHouse.length > 50) {
+      errors.house_name = ['House name cannot exceed 50 characters.'];
+    } else if (!/^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmedHouse)) {
+      errors.house_name = ['House name can contain only letters and spaces.'];
     }
 
-    if (!pincode.trim()) {
+    // 11. Place
+    if (!trimmedPlace) {
+      errors.place = ['Place is required.'];
+    } else if (trimmedPlace.length > 50) {
+      errors.place = ['Place cannot exceed 50 characters.'];
+    } else if (!/^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmedPlace)) {
+      errors.place = ['Place can contain only letters and spaces.'];
+    }
+
+    // 12. Panchayath
+    if (!trimmedPanchayath) {
+      errors.panchayath = ['Panchayath is required.'];
+    } else if (trimmedPanchayath.length > 50) {
+      errors.panchayath = ['Panchayath cannot exceed 50 characters.'];
+    } else if (!/^[A-Za-z]+(?: [A-Za-z]+)*$/.test(trimmedPanchayath)) {
+      errors.panchayath = ['Panchayath can contain only letters and spaces.'];
+    }
+
+    // 13. Ward Number
+    if (!trimmedWard) {
+      errors.ward_no = ['Ward number is required.'];
+    } else if (!/^[1-9][0-9]*$/.test(trimmedWard)) {
+      errors.ward_no = ['Ward number must be a positive whole number.'];
+    }
+
+    // 14. Pincode
+    if (!trimmedPincode) {
       errors.pincode = ['Pincode is required.'];
-    } else if (!/^\d{6}$/.test(pincode.trim())) {
-      errors.pincode = ['Pincode must be a valid 6-digit number.'];
+    } else if (!/^\d{6}$/.test(trimmedPincode)) {
+      errors.pincode = ['Pincode must be exactly 6 digits.'];
     }
 
-    setFieldErrors(errors);
-    return Object.keys(errors).length === 0;
+    return errors;
   };
 
-  // Step 4 Client Validations
+  // Step 4 Document Upload Validations
   const validateStep4 = () => {
     const errors = {};
     const validExts = ['pdf', 'jpg', 'jpeg', 'png'];
@@ -174,7 +297,32 @@ export default function RegisterPage({ onNavigate }) {
     }
 
     setFieldErrors(errors);
+    if (Object.keys(errors).length > 0) {
+      focusFirstInvalidField(errors);
+    }
     return Object.keys(errors).length === 0;
+  };
+
+  const handleContinueStep1 = () => {
+    const errors = validateStep1();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      focusFirstInvalidField(errors);
+      return;
+    }
+    setFieldErrors({});
+    setCurrentStep(3);
+  };
+
+  const handleAddressContinue = () => {
+    const errors = validateAddressStep();
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      focusFirstInvalidField(errors);
+      return;
+    }
+    setFieldErrors({});
+    setCurrentStep(4);
   };
 
   const handleNextStep = () => {
@@ -182,15 +330,9 @@ export default function RegisterPage({ onNavigate }) {
       if (!selectedRole) return;
       setCurrentStep(2);
     } else if (currentStep === 2) {
-      if (validateStep2()) {
-        setFieldErrors({});
-        setCurrentStep(3);
-      }
+      handleContinueStep1();
     } else if (currentStep === 3) {
-      if (validateStep3()) {
-        setFieldErrors({});
-        setCurrentStep(4);
-      }
+      handleAddressContinue();
     }
   };
 
@@ -219,12 +361,12 @@ export default function RegisterPage({ onNavigate }) {
     formData.append('house_name', houseName.trim());
     formData.append('place', place.trim());
     formData.append('panchayath', panchayath.trim());
-    formData.append('ward_no', wardNo);
+    formData.append('ward_no', String(wardNo).trim());
     formData.append('pincode', pincode.trim());
 
     if (selectedRole === 'patient') {
       formData.append('dob', dob);
-      if (gender) formData.append('gender', gender);
+      if (gender) formData.append('gender', gender.trim());
       if (dischargeSummaryFile) {
         formData.append('discharge_summary', dischargeSummaryFile);
       }
@@ -288,6 +430,7 @@ export default function RegisterPage({ onNavigate }) {
         } else if (errorKeys.some((k) => step4Fields.includes(k))) {
           setCurrentStep(4);
         }
+        focusFirstInvalidField(errors);
       } else {
         setBannerType('error');
         setBannerMessage(err.message || 'An error occurred during registration. Please try again.');
@@ -512,7 +655,7 @@ export default function RegisterPage({ onNavigate }) {
                       <button
                         type="button"
                         onClick={handleNextStep}
-                        className="w-full py-3 px-5 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center justify-center gap-2"
+                        className="w-full py-3 px-5 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
                       >
                         <span>Continue to Personal Details</span>
                         <ArrowRight className="w-4 h-4" />
@@ -521,7 +664,7 @@ export default function RegisterPage({ onNavigate }) {
                   </motion.div>
                 )}
 
-                {/* STEP 2: PERSONAL DETAILS */}
+                {/* STEP 2: PERSONAL DETAILS (STEP 1 IN REQUIREMENTS) */}
                 {currentStep === 2 && (
                   <motion.div
                     initial={{ opacity: 0, x: 10 }}
@@ -535,8 +678,8 @@ export default function RegisterPage({ onNavigate }) {
                         Full Name <span className="text-rose-500">*</span>
                       </label>
                       <input
+                        id="field-name"
                         type="text"
-                        required
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         placeholder="e.g. John Doe"
@@ -558,8 +701,8 @@ export default function RegisterPage({ onNavigate }) {
                           Email Address <span className="text-rose-500">*</span>
                         </label>
                         <input
+                          id="field-email"
                           type="email"
-                          required
                           value={email}
                           onChange={(e) => setEmail(e.target.value)}
                           placeholder="name@example.com"
@@ -580,9 +723,10 @@ export default function RegisterPage({ onNavigate }) {
                           <span className="font-normal text-serene-muted lowercase">(10 digits)</span>
                         </label>
                         <input
+                          id="field-phone"
                           type="tel"
-                          required
                           maxLength={10}
+                          inputMode="numeric"
                           value={phone}
                           onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
                           placeholder="9876543210"
@@ -606,8 +750,8 @@ export default function RegisterPage({ onNavigate }) {
                         </label>
                         <div className="relative">
                           <input
+                            id="field-password"
                             type={showPassword ? 'text' : 'password'}
-                            required
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             placeholder="••••••••"
@@ -620,13 +764,44 @@ export default function RegisterPage({ onNavigate }) {
                           <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-serene-muted hover:text-serene-text p-1"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-serene-muted hover:text-serene-text p-1 cursor-pointer"
                           >
                             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                         </div>
                         {fieldErrors.password && (
                           <p className="text-rose-600 text-xs mt-1 font-semibold">{fieldErrors.password[0]}</p>
+                        )}
+
+                        {/* Password Requirements Checklist */}
+                        {password.length > 0 && (
+                          <div className="p-3 bg-serene-low/80 rounded-xl border border-serene-outline-subtle/80 space-y-1 text-xs mt-2">
+                            <p className="font-extrabold text-serene-text text-[11px] uppercase tracking-wider mb-1">
+                              Password must contain:
+                            </p>
+                            <div className="space-y-1 text-[11px]">
+                              <div className={`flex items-center gap-1.5 ${password.length >= 8 ? 'text-emerald-700 font-bold' : 'text-serene-muted'}`}>
+                                {password.length >= 8 ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-3.5 text-center text-xs">•</span>}
+                                <span>At least 8 characters</span>
+                              </div>
+                              <div className={`flex items-center gap-1.5 ${/[A-Z]/.test(password) ? 'text-emerald-700 font-bold' : 'text-serene-muted'}`}>
+                                {/[A-Z]/.test(password) ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-3.5 text-center text-xs">•</span>}
+                                <span>One uppercase letter</span>
+                              </div>
+                              <div className={`flex items-center gap-1.5 ${/[a-z]/.test(password) ? 'text-emerald-700 font-bold' : 'text-serene-muted'}`}>
+                                {/[a-z]/.test(password) ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-3.5 text-center text-xs">•</span>}
+                                <span>One lowercase letter</span>
+                              </div>
+                              <div className={`flex items-center gap-1.5 ${/\d/.test(password) ? 'text-emerald-700 font-bold' : 'text-serene-muted'}`}>
+                                {/\d/.test(password) ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-3.5 text-center text-xs">•</span>}
+                                <span>One number</span>
+                              </div>
+                              <div className={`flex items-center gap-1.5 ${/[^A-Za-z0-9]/.test(password) ? 'text-emerald-700 font-bold' : 'text-serene-muted'}`}>
+                                {/[^A-Za-z0-9]/.test(password) ? <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0" /> : <span className="w-3.5 text-center text-xs">•</span>}
+                                <span>One special character</span>
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
 
@@ -636,8 +811,8 @@ export default function RegisterPage({ onNavigate }) {
                         </label>
                         <div className="relative">
                           <input
+                            id="field-confirm_password"
                             type={showConfirmPassword ? 'text' : 'password'}
-                            required
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             placeholder="••••••••"
@@ -650,7 +825,7 @@ export default function RegisterPage({ onNavigate }) {
                           <button
                             type="button"
                             onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-serene-muted hover:text-serene-text p-1"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-serene-muted hover:text-serene-text p-1 cursor-pointer"
                           >
                             {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
@@ -671,8 +846,8 @@ export default function RegisterPage({ onNavigate }) {
                               Date of Birth <span className="text-rose-500">*</span>
                             </label>
                             <input
+                              id="field-dob"
                               type="date"
-                              required
                               value={dob}
                               onChange={(e) => setDob(e.target.value)}
                               className={`w-full px-3.5 py-2.5 rounded-xl border text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
@@ -691,7 +866,7 @@ export default function RegisterPage({ onNavigate }) {
                               Gender <span className="text-rose-500">*</span>
                             </label>
                             <select
-                              required
+                              id="field-gender"
                               value={gender}
                               onChange={(e) => setGender(e.target.value)}
                               className={`w-full px-3.5 py-2.5 rounded-xl border text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
@@ -709,27 +884,40 @@ export default function RegisterPage({ onNavigate }) {
                           </div>
                         </div>
 
+                        {/* Emergency Contact */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           <div>
                             <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-                              Emergency Contact Name
+                              Emergency Contact Name <span className="font-normal text-serene-muted lowercase">(optional)</span>
                             </label>
                             <input
+                              id="field-emergency_contact_name"
                               type="text"
                               value={emergencyContactName}
                               onChange={(e) => setEmergencyContactName(e.target.value)}
                               placeholder="e.g. Jane Doe"
-                              className="w-full px-3.5 py-2.5 rounded-xl border border-serene-outline-subtle text-sm bg-white focus:outline-none focus:border-serene-primary"
+                              className={`w-full px-3.5 py-2.5 rounded-xl border text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
+                                fieldErrors.emergency_contact_name
+                                  ? 'border-rose-400 focus:ring-rose-200'
+                                  : 'border-serene-outline-subtle focus:border-serene-primary'
+                              }`}
                             />
+                            {fieldErrors.emergency_contact_name && (
+                              <p className="text-rose-600 text-xs mt-1 font-semibold">
+                                {fieldErrors.emergency_contact_name[0]}
+                              </p>
+                            )}
                           </div>
 
                           <div>
                             <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-                              Emergency Contact Phone
+                              Emergency Contact Phone <span className="font-normal text-serene-muted lowercase">(optional)</span>
                             </label>
                             <input
+                              id="field-emergency_contact_phone"
                               type="tel"
                               maxLength={10}
+                              inputMode="numeric"
                               value={emergencyContactPhone}
                               onChange={(e) => setEmergencyContactPhone(e.target.value.replace(/\D/g, ''))}
                               placeholder="9876543210"
@@ -754,7 +942,7 @@ export default function RegisterPage({ onNavigate }) {
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        className="py-3 px-5 text-sm font-bold text-serene-muted hover:text-serene-text bg-serene-container hover:bg-serene-container/80 rounded-xl transition-all flex items-center gap-2"
+                        className="py-3 px-5 text-sm font-bold text-serene-muted hover:text-serene-text bg-serene-container hover:bg-serene-container/80 rounded-xl transition-all flex items-center gap-2 cursor-pointer"
                       >
                         <ArrowLeft className="w-4 h-4" />
                         <span>Back</span>
@@ -762,8 +950,8 @@ export default function RegisterPage({ onNavigate }) {
 
                       <button
                         type="button"
-                        onClick={handleNextStep}
-                        className="py-3 px-6 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center gap-2"
+                        onClick={handleContinueStep1}
+                        className="py-3 px-6 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
                       >
                         <span>Continue to Address Details</span>
                         <ArrowRight className="w-4 h-4" />
@@ -772,7 +960,7 @@ export default function RegisterPage({ onNavigate }) {
                   </motion.div>
                 )}
 
-                {/* STEP 3: ADDRESS DETAILS */}
+                {/* STEP 3: ADDRESS DETAILS (STEP 2 IN REQUIREMENTS) */}
                 {currentStep === 3 && (
                   <motion.div
                     initial={{ opacity: 0, x: 10 }}
@@ -787,8 +975,8 @@ export default function RegisterPage({ onNavigate }) {
                           House Name <span className="text-rose-500">*</span>
                         </label>
                         <input
+                          id="field-house_name"
                           type="text"
-                          required
                           value={houseName}
                           onChange={(e) => setHouseName(e.target.value)}
                           placeholder="e.g. Green Villa"
@@ -809,8 +997,8 @@ export default function RegisterPage({ onNavigate }) {
                           Place <span className="text-rose-500">*</span>
                         </label>
                         <input
+                          id="field-place"
                           type="text"
-                          required
                           value={place}
                           onChange={(e) => setPlace(e.target.value)}
                           placeholder="e.g. Town Center"
@@ -831,8 +1019,8 @@ export default function RegisterPage({ onNavigate }) {
                           Panchayath <span className="text-rose-500">*</span>
                         </label>
                         <input
+                          id="field-panchayath"
                           type="text"
-                          required
                           value={panchayath}
                           onChange={(e) => setPanchayath(e.target.value)}
                           placeholder="e.g. Central Panchayath"
@@ -853,9 +1041,9 @@ export default function RegisterPage({ onNavigate }) {
                           Ward No. <span className="text-rose-500">*</span>
                         </label>
                         <input
-                          type="number"
-                          required
-                          min="1"
+                          id="field-ward_no"
+                          type="text"
+                          inputMode="numeric"
                           value={wardNo}
                           onChange={(e) => setWardNo(e.target.value)}
                           placeholder="e.g. 5"
@@ -873,15 +1061,16 @@ export default function RegisterPage({ onNavigate }) {
                       {/* Pincode */}
                       <div className="sm:col-span-2">
                         <label className="block text-xs font-extrabold text-serene-text uppercase tracking-wider mb-1">
-                          Pincode <span className="text-rose-500">*</span>{' '}
-                          <span className="font-normal text-serene-muted lowercase">(6 digits)</span>
+                          PINCODE <span className="text-rose-500">*</span>{' '}
+                          <span className="font-normal text-serene-muted">(6 digits)</span>
                         </label>
                         <input
+                          id="field-pincode"
                           type="text"
-                          required
                           maxLength={6}
+                          inputMode="numeric"
                           value={pincode}
-                          onChange={(e) => setPincode(e.target.value.replace(/\D/g, ''))}
+                          onChange={(e) => setPincode(e.target.value)}
                           placeholder="682001"
                           className={`w-full px-3.5 py-2.5 rounded-xl border text-sm bg-white focus:outline-none focus:ring-2 transition-all ${
                             fieldErrors.pincode
@@ -900,7 +1089,7 @@ export default function RegisterPage({ onNavigate }) {
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        className="py-3 px-5 text-sm font-bold text-serene-muted hover:text-serene-text bg-serene-container hover:bg-serene-container/80 rounded-xl transition-all flex items-center gap-2"
+                        className="py-3 px-5 text-sm font-bold text-serene-muted hover:text-serene-text bg-serene-container hover:bg-serene-container/80 rounded-xl transition-all flex items-center gap-2 cursor-pointer"
                       >
                         <ArrowLeft className="w-4 h-4" />
                         <span>Back</span>
@@ -908,8 +1097,8 @@ export default function RegisterPage({ onNavigate }) {
 
                       <button
                         type="button"
-                        onClick={handleNextStep}
-                        className="py-3 px-6 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center gap-2"
+                        onClick={handleAddressContinue}
+                        className="py-3 px-6 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
                       >
                         <span>Continue to Document Upload</span>
                         <ArrowRight className="w-4 h-4" />
@@ -933,7 +1122,11 @@ export default function RegisterPage({ onNavigate }) {
                           Discharge Summary / Referral Document <span className="text-rose-500">*</span>{' '}
                           <span className="font-normal text-serene-muted lowercase">(PDF, JPG, PNG up to 5MB)</span>
                         </label>
-                        <label className="border-2 border-dashed border-serene-outline-subtle hover:border-serene-primary rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-serene-low/50">
+                        <label
+                          id="field-discharge_summary"
+                          tabIndex={0}
+                          className="border-2 border-dashed border-serene-outline-subtle hover:border-serene-primary rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-serene-low/50 focus:outline-none focus:ring-2 focus:ring-serene-primary"
+                        >
                           <Upload className="w-8 h-8 text-serene-primary mb-2" />
                           <span className="text-xs font-extrabold text-serene-text">
                             {dischargeSummaryFile ? dischargeSummaryFile.name : 'Click or drag document to upload'}
@@ -956,7 +1149,7 @@ export default function RegisterPage({ onNavigate }) {
                       </div>
                     )}
 
-                    {/* CAREGIVER IDENTITY PROOF & PROFESSIONAL DETAILS (MATCHING SCREENSHOT) */}
+                    {/* CAREGIVER IDENTITY PROOF & PROFESSIONAL DETAILS */}
                     {selectedRole === 'caregiver' && (
                       <div className="space-y-5">
                         {/* Identity Proof Upload */}
@@ -965,7 +1158,11 @@ export default function RegisterPage({ onNavigate }) {
                             Identity Proof Upload <span className="text-rose-500">*</span>{' '}
                             <span className="font-normal text-serene-muted lowercase">(PDF, JPG, PNG up to 5MB)</span>
                           </label>
-                          <label className="border-2 border-dashed border-serene-outline-subtle hover:border-serene-primary rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-serene-low/50">
+                          <label
+                            id="field-identity_proof"
+                            tabIndex={0}
+                            className="border-2 border-dashed border-serene-outline-subtle hover:border-serene-primary rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer transition-colors bg-serene-low/50 focus:outline-none focus:ring-2 focus:ring-serene-primary"
+                          >
                             <Upload className="w-8 h-8 text-serene-primary mb-2" />
                             <span className="text-xs font-extrabold text-serene-text">
                               {identityProofFile ? identityProofFile.name : 'Click or drag document to upload identity proof'}
@@ -987,7 +1184,7 @@ export default function RegisterPage({ onNavigate }) {
                           )}
                         </div>
 
-                        {/* PROFESSIONAL DETAILS & QUALIFICATIONS (OPTIONAL SECTION MATCHING SCREENSHOT) */}
+                        {/* PROFESSIONAL DETAILS & QUALIFICATIONS (OPTIONAL SECTION) */}
                         <div className="pt-3 border-t border-serene-outline-subtle/80 space-y-4">
                           <h4 className="text-xs font-extrabold uppercase tracking-wider text-serene-muted">
                             Professional Details & Qualifications <span className="font-normal lowercase">(Optional)</span>
@@ -1051,7 +1248,7 @@ export default function RegisterPage({ onNavigate }) {
                       <button
                         type="button"
                         onClick={handlePrevStep}
-                        className="py-3 px-5 text-sm font-bold text-serene-muted hover:text-serene-text bg-serene-container hover:bg-serene-container/80 rounded-xl transition-all flex items-center gap-2"
+                        className="py-3 px-5 text-sm font-bold text-serene-muted hover:text-serene-text bg-serene-container hover:bg-serene-container/80 rounded-xl transition-all flex items-center gap-2 cursor-pointer"
                       >
                         <ArrowLeft className="w-4 h-4" />
                         <span>Back</span>
@@ -1060,7 +1257,7 @@ export default function RegisterPage({ onNavigate }) {
                       <button
                         type="submit"
                         disabled={isLoading}
-                        className="py-3.5 px-7 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center gap-2"
+                        className="py-3.5 px-7 text-sm font-bold text-white bg-serene-primary hover:bg-serene-primary-hover rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer"
                       >
                         {isLoading ? (
                           <span>Submitting Registration...</span>
@@ -1085,7 +1282,7 @@ export default function RegisterPage({ onNavigate }) {
               <button
                 type="button"
                 onClick={() => handleNavigate('/login')}
-                className="font-extrabold text-serene-primary hover:underline ml-1"
+                className="font-extrabold text-serene-primary hover:underline ml-1 cursor-pointer"
               >
                 Sign In
               </button>
@@ -1095,7 +1292,7 @@ export default function RegisterPage({ onNavigate }) {
               <button
                 type="button"
                 onClick={() => handleNavigate('/check-application-status')}
-                className="font-extrabold text-[#645e45] hover:underline ml-1"
+                className="font-extrabold text-[#645e45] hover:underline ml-1 cursor-pointer"
               >
                 Check Application Status
               </button>

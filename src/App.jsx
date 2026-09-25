@@ -3,6 +3,9 @@ import LandingPage from './pages/LandingPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import CheckApplicationStatusPage from './pages/CheckApplicationStatusPage';
+import ForgotPasswordPage from './pages/ForgotPasswordPage';
+import VerifyOtpPage from './pages/VerifyOtpPage';
+import ResetPasswordPage from './pages/ResetPasswordPage';
 import PatientDashboard from './pages/PatientDashboard';
 import CaregiverDashboard from './pages/CaregiverDashboard';
 import DoctorDashboard from './pages/DoctorDashboard';
@@ -50,6 +53,18 @@ function App() {
 
     if (currentPath === '/register') {
       return <RegisterPage onNavigate={navigateTo} />;
+    }
+
+    if (currentPath === '/forgot-password') {
+      return <ForgotPasswordPage onNavigate={navigateTo} />;
+    }
+
+    if (currentPath === '/verify-otp') {
+      return <VerifyOtpPage onNavigate={navigateTo} />;
+    }
+
+    if (currentPath === '/reset-password') {
+      return <ResetPasswordPage onNavigate={navigateTo} />;
     }
 
     if (currentPath === '/check-application-status' || currentPath === '/application-status') {

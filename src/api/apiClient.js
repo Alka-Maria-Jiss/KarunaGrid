@@ -43,7 +43,10 @@ function sanitizeError(error, responseData = null, status = null) {
       !window.location.pathname.includes('/login') &&
       !window.location.pathname.includes('/register') &&
       !window.location.pathname.includes('/check-application-status') &&
-      !window.location.pathname.includes('/application-status')
+      !window.location.pathname.includes('/application-status') &&
+      !window.location.pathname.includes('/forgot-password') &&
+      !window.location.pathname.includes('/verify-otp') &&
+      !window.location.pathname.includes('/reset-password')
     ) {
       setTimeout(() => {
         window.location.href = '/login';
@@ -70,9 +73,17 @@ function sanitizeError(error, responseData = null, status = null) {
     );
   }
 
+  if (status === 409) {
+    return new ApiClientError(
+      responseData?.detail || 'This equipment unit is no longer available. Please refresh and select another unit.',
+      409,
+      responseData
+    );
+  }
+
   if (status === 429) {
     return new ApiClientError(
-      'Too many attempts. Please wait a moment and try again.',
+      responseData?.detail || 'Too many attempts. Please wait a moment and try again.',
       429,
       responseData
     );
@@ -80,7 +91,7 @@ function sanitizeError(error, responseData = null, status = null) {
 
   if (status >= 500) {
     return new ApiClientError(
-      'Something went wrong on our end. Please try again in a moment.',
+      responseData?.detail || 'Something went wrong on our end. Please try again in a moment.',
       status,
       responseData
     );
@@ -99,7 +110,13 @@ export const apiClient = {
     const token = localStorage.getItem('access_token');
     const headers = { ...options.headers };
 
-    const isPublicEndpoint = endpoint.includes('/auth/login') || endpoint.includes('/auth/register');
+    const isPublicEndpoint =
+      endpoint.includes('/auth/login') ||
+      endpoint.includes('/auth/register') ||
+      endpoint.includes('/auth/google') ||
+      endpoint.includes('/google') ||
+      endpoint.includes('/forgot-password');
+
 
     if (token && !isPublicEndpoint) {
       headers['Authorization'] = `Bearer ${token}`;
@@ -146,6 +163,15 @@ export const apiClient = {
     return this.request(endpoint, {
       ...options,
       method: 'POST',
+      body: isFormData ? body : JSON.stringify(body),
+    });
+  },
+
+  patch(endpoint, body, options = {}) {
+    const isFormData = body instanceof FormData;
+    return this.request(endpoint, {
+      ...options,
+      method: 'PATCH',
       body: isFormData ? body : JSON.stringify(body),
     });
   },

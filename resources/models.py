@@ -1,11 +1,10 @@
 from django.db import models
 
 
-class WelfareApplicationStatus(models.TextChoices):
-    SUBMITTED = 'Submitted', 'Submitted'
-    UNDER_REVIEW = 'UnderReview', 'UnderReview'
-    APPROVED = 'Approved', 'Approved'
-    REJECTED = 'Rejected', 'Rejected'
+class WelfareSchemeStatus(models.TextChoices):
+    DRAFT = 'Draft', 'Draft'
+    PUBLISHED = 'Published', 'Published'
+    UNPUBLISHED = 'Unpublished', 'Unpublished'
 
 
 class EquipmentUnitStatus(models.TextChoices):
@@ -30,11 +29,22 @@ class DeliveryStatus(models.TextChoices):
 
 class WelfareScheme(models.Model):
     scheme_id = models.AutoField(primary_key=True)
-    name = models.CharField(max_length=150)
+    name = models.CharField(max_length=200)
+    category = models.CharField(max_length=100, default='Financial Aid')
     description = models.TextField(null=True, blank=True)
     eligibility_criteria = models.TextField(null=True, blank=True)
+    benefits = models.TextField(null=True, blank=True)
     required_documents = models.TextField(null=True, blank=True)
-    application_link = models.CharField(max_length=255, null=True, blank=True)
+    application_instructions = models.TextField(null=True, blank=True)
+    official_application_url = models.URLField(max_length=500, null=True, blank=True)
+    government_department = models.CharField(max_length=200, null=True, blank=True)
+    contact_info = models.TextField(null=True, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=WelfareSchemeStatus.choices,
+        default=WelfareSchemeStatus.DRAFT,
+    )
+    published_at = models.DateTimeField(null=True, blank=True)
     created_by_admin = models.ForeignKey(
         'accounts.Administrator', on_delete=models.CASCADE, db_column='created_by_admin_id'
     )
@@ -45,32 +55,7 @@ class WelfareScheme(models.Model):
         db_table = 'welfare_schemes'
 
     def __str__(self):
-        return f"Scheme: {self.name}"
-
-
-class WelfareApplication(models.Model):
-    application_id = models.AutoField(primary_key=True)
-    patient = models.ForeignKey('accounts.Patient', on_delete=models.CASCADE, db_column='patient_id')
-    scheme = models.ForeignKey('resources.WelfareScheme', on_delete=models.CASCADE, db_column='scheme_id')
-    submitted_by = models.ForeignKey(
-        'accounts.User', on_delete=models.CASCADE, db_column='submitted_by_user_id'
-    )
-    status = models.CharField(
-        max_length=20, choices=WelfareApplicationStatus.choices, default=WelfareApplicationStatus.SUBMITTED
-    )
-    submitted_documents = models.TextField(null=True, blank=True)
-    remarks = models.TextField(null=True, blank=True)
-    reviewed_by_admin = models.ForeignKey(
-        'accounts.Administrator', on_delete=models.SET_NULL, null=True, blank=True, db_column='reviewed_by_admin_id'
-    )
-    submitted_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'welfare_applications'
-
-    def __str__(self):
-        return f"Welfare Application #{self.application_id} ({self.status})"
+        return f"Scheme: {self.name} ({self.status})"
 
 
 class EquipmentType(models.Model):

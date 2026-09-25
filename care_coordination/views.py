@@ -1412,7 +1412,7 @@ class HomeVisitOccurrenceListView(APIView):
 
         occurrences_qs = HomeVisitOccurrence.objects.select_related(
             'patient', 'allocated_nurse', 'visiting_doctor', 'schedule'
-        ).prefetch_related('homevisitsummary__visitsymptom_set').order_by('-scheduled_date')
+        ).prefetch_related('homevisitsummary__visitsymptom_set').order_by('scheduled_date')
 
         if role == Role.PATIENT:
             patient = get_authenticated_patient(request)
@@ -1567,7 +1567,7 @@ class DoctorHomeVisitsView(APIView):
         ).distinct().order_by('-updated_at')
         occurrences_qs = HomeVisitOccurrence.objects.select_related('patient', 'allocated_nurse', 'visiting_doctor', 'schedule').filter(
             Q(patient__reviewed_by_doctor=doctor) | Q(visiting_doctor=doctor)
-        ).distinct().order_by('-scheduled_date')
+        ).distinct().order_by('scheduled_date')
 
         patient_id = request.query_params.get('patient_id')
         if patient_id:
@@ -1662,7 +1662,7 @@ class NurseHomeVisitsView(APIView):
         patient_id = request.query_params.get('patient_id')
 
         today = timezone.now().date()
-        occurrences_qs = HomeVisitOccurrence.objects.select_related('patient', 'allocated_nurse', 'visiting_doctor', 'schedule').all().order_by('-scheduled_date')
+        occurrences_qs = HomeVisitOccurrence.objects.select_related('patient', 'allocated_nurse', 'visiting_doctor', 'schedule').all().order_by('scheduled_date')
 
         if patient_id:
             occurrences_qs = occurrences_qs.filter(patient_id=patient_id)

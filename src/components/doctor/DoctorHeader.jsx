@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Bell, ChevronDown, Stethoscope, User, LogOut, CheckCircle2, Circle } from 'lucide-react';
+import { Menu, ChevronDown, Stethoscope, User, LogOut, CheckCircle2, Circle } from 'lucide-react';
+import NotificationDropdown from '../NotificationDropdown';
 
 export default function DoctorHeader({
   doctorInfo = {},
@@ -88,19 +89,12 @@ export default function DoctorHeader({
         </div>
 
         {/* NOTIFICATIONS BELL */}
-        <button
-          type="button"
-          onClick={() => onNavigate && onNavigate('notifications')}
-          className="relative p-2 rounded-xl text-[#645e45] bg-[#f4ede0] hover:bg-[#645e45] hover:text-white transition-colors cursor-pointer"
-          title="Care Notifications"
-        >
-          <Bell className="w-4 h-4" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#ba1a1a] text-white text-[9px] font-black flex items-center justify-center border-2 border-[#fdfbf7]">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
-        </button>
+        <NotificationDropdown
+          onViewAll={() => onNavigate && onNavigate('notifications')}
+          buttonClassName="relative p-2 rounded-xl text-[#645e45] bg-[#f4ede0] hover:bg-[#645e45] hover:text-white transition-colors cursor-pointer"
+          iconClassName="w-4 h-4"
+          initialUnreadCount={unreadCount}
+        />
 
         {/* PROFILE MENU DROPDOWN */}
         <div className="relative" ref={profileMenuRef}>
