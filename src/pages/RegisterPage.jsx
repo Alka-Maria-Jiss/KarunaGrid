@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
+import BackToHomeButton from '../components/BackToHomeButton';
 import logoImg from '../assets/logo.png';
 
 const stepTitles = [
@@ -444,7 +445,11 @@ export default function RegisterPage({ onNavigate }) {
   return (
     <div className="min-h-screen bg-serene-bg flex flex-col justify-between p-4 sm:p-6 md:p-8 selection:bg-serene-primary-container selection:text-serene-text">
       {/* Main Container */}
-      <main className="flex-1 flex items-center justify-center my-6">
+      <main className="flex-1 flex flex-col items-center justify-center my-6">
+        <div className="w-full max-w-[540px] mb-3 flex items-center justify-start">
+          <BackToHomeButton onNavigate={onNavigate} />
+        </div>
+
         <motion.div
           initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}

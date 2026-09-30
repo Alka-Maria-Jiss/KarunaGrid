@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { LogIn, Eye, EyeOff, CheckCircle2, AlertCircle } from 'lucide-react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
+import BackToHomeButton from '../components/BackToHomeButton';
 import logoImg from '../assets/logo.png';
 
 export default function LoginPage({ onNavigate }) {
@@ -217,7 +218,11 @@ export default function LoginPage({ onNavigate }) {
   return (
     <div className="min-h-screen bg-serene-bg flex flex-col justify-between p-4 sm:p-6 md:p-8 selection:bg-serene-primary-container selection:text-serene-text">
       {/* Main Form Container */}
-      <main className="flex-1 flex items-center justify-center my-8">
+      <main className="flex-1 flex flex-col items-center justify-center my-6">
+        <div className="w-full max-w-[500px] mb-3 flex items-center justify-start">
+          <BackToHomeButton onNavigate={onNavigate} />
+        </div>
+
         <motion.div
           initial={{ opacity: 0, scale: 0.98, y: 10 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -226,9 +231,6 @@ export default function LoginPage({ onNavigate }) {
         >
           {/* Header */}
           <div className="text-center space-y-1">
-            <span className="serene-tag text-xs font-bold px-3 py-1 bg-serene-container text-serene-primary border border-serene-outline-subtle inline-block mb-1">
-              Portal Access
-            </span>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-serene-text tracking-tight flex items-center justify-center gap-2.5">
               <img src={logoImg} alt="KarunaGrid Logo" className="w-8 h-8 sm:w-9 sm:h-9 object-contain rounded-full shadow-xs" />
               <span>Sign In to KarunaGrid</span>
