@@ -25,6 +25,10 @@ from .views import (
     AdminCreateStaffView,
     AdminOnboardDoctorView,
     AdminOnboardNurseView,
+    AdminApproveDoctorView,
+    AdminRejectDoctorView,
+    AdminApproveNurseView,
+    AdminRejectNurseView,
     AdminStatsView,
     AdminProfileView,
     AdminUserListView,
@@ -120,6 +124,10 @@ urlpatterns = [
     path('admin/staff/create/', AdminCreateStaffView.as_view(), name='admin_create_staff'),
     path('admin/onboard-doctor/', AdminOnboardDoctorView.as_view(), name='admin_onboard_doctor'),
     path('admin/onboard-nurse/', AdminOnboardNurseView.as_view(), name='admin_onboard_nurse'),
+    path('admin/doctors/<int:doctor_id>/approve/', AdminApproveDoctorView.as_view(), name='admin_approve_doctor'),
+    path('admin/doctors/<int:doctor_id>/reject/', AdminRejectDoctorView.as_view(), name='admin_reject_doctor'),
+    path('admin/nurses/<int:nurse_id>/approve/', AdminApproveNurseView.as_view(), name='admin_approve_nurse'),
+    path('admin/nurses/<int:nurse_id>/reject/', AdminRejectNurseView.as_view(), name='admin_reject_nurse'),
 
     # Redesigned Phase 1 Administrator Dashboard & Management APIs
     path('admin/profile/', AdminProfileView.as_view(), name='admin_profile'),

@@ -280,11 +280,15 @@ class HomeVisitWorkflowTests(TestCase):
     # -------------------------------------------------------------
     def test_09_patient_urgent_visit_workflow(self):
         """Patient requests urgent visit -> Nurse approves -> Doctor assigned -> Nurse completes."""
+        target_date = timezone.now().date() + datetime.timedelta(days=1)
+        if target_date.weekday() == 6:
+            target_date += datetime.timedelta(days=1)
+
         self.client.force_authenticate(user=self.pat_user1)
         res = self.client.post('/api/care-coordination/home-visits/urgent-requests/', {
             "urgency_level": "Urgent",
             "reason": "Severe pain flare-up",
-            "date": str(timezone.now().date() + datetime.timedelta(days=1))
+            "date": str(target_date)
         }, format='json')
         self.assertEqual(res.status_code, status.HTTP_201_CREATED)
         occ_id = res.data['occurrence_id']

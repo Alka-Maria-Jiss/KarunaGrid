@@ -494,11 +494,14 @@ class CaregiverRegisterSerializer(serializers.Serializer):
 
 
 class LoginSerializer(serializers.Serializer):
-    email = serializers.EmailField(required=True)
+    email = serializers.CharField(required=False, allow_blank=True)
+    username = serializers.CharField(required=False, allow_blank=True)
     password = serializers.CharField(write_only=True, required=True)
 
     def validate(self, attrs):
-        email = attrs.get('email')
+        email = (attrs.get('email') or attrs.get('username') or '').strip()
+        if not email:
+            raise serializers.ValidationError({"email": ["Email or username is required."]})
         password = attrs.get('password')
 
         user = authenticate(username=email, password=password)
@@ -582,11 +585,14 @@ class PendingCaregiverSerializer(serializers.ModelSerializer):
         return None
 
 
+from .notifications import generate_temporary_password
+
+
 class AdminStaffCreateSerializer(serializers.Serializer):
     role = serializers.ChoiceField(choices=['doctor', 'nurse'], required=True)
     name = serializers.CharField(max_length=100, required=True)
     email = serializers.EmailField(max_length=150, required=True)
-    password = serializers.CharField(write_only=True, required=True)
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True, default='')
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
     gender = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
     date_of_birth = serializers.DateField(required=False, allow_null=True, default=None)
@@ -596,7 +602,8 @@ class AdminStaffCreateSerializer(serializers.Serializer):
     service_area = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
 
     def validate_password(self, value):
-        validate_password(value)
+        if value:
+            validate_password(value)
         return value
 
     def validate_email(self, value):
@@ -607,7 +614,7 @@ class AdminStaffCreateSerializer(serializers.Serializer):
     def create(self, validated_data):
         role_choice = validated_data['role'].lower()
         email = validated_data['email']
-        password = validated_data['password']
+        password = validated_data.get('password') or generate_temporary_password()
 
         with transaction.atomic():
             if role_choice == 'doctor':
@@ -650,13 +657,14 @@ class AdminStaffCreateSerializer(serializers.Serializer):
                     verification_status=VerificationStatus.APPROVED,
                     is_available_now=True
                 )
+        user._temporary_password = password
         return user
 
 
 class AdminOnboardDoctorSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100, required=True)
     email = serializers.EmailField(max_length=150, required=True)
-    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True, default='', style={'input_type': 'password'})
     specialization = serializers.CharField(max_length=100, required=False, allow_blank=True, default='Palliative Medicine')
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
     service_area = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
@@ -666,7 +674,8 @@ class AdminOnboardDoctorSerializer(serializers.Serializer):
     experience = serializers.IntegerField(required=False, default=0, min_value=0)
 
     def validate_password(self, value):
-        validate_password(value)
+        if value:
+            validate_password(value)
         return value
 
     def validate_email(self, value):
@@ -676,7 +685,7 @@ class AdminOnboardDoctorSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         email = validated_data['email']
-        password = validated_data['password']
+        password = validated_data.get('password') or generate_temporary_password()
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -698,13 +707,14 @@ class AdminOnboardDoctorSerializer(serializers.Serializer):
                 verification_status=VerificationStatus.APPROVED,
                 is_available_now=True
             )
+        user._temporary_password = password
         return user
 
 
 class AdminOnboardNurseSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100, required=True)
     email = serializers.EmailField(max_length=150, required=True)
-    password = serializers.CharField(write_only=True, required=True, style={'input_type': 'password'})
+    password = serializers.CharField(write_only=True, required=False, allow_blank=True, default='', style={'input_type': 'password'})
     phone = serializers.CharField(max_length=15, required=False, allow_blank=True, default='')
     service_area = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
     specialization = serializers.CharField(max_length=100, required=False, allow_blank=True, default='Palliative Nursing')
@@ -714,7 +724,8 @@ class AdminOnboardNurseSerializer(serializers.Serializer):
     experience = serializers.IntegerField(required=False, default=0, min_value=0)
 
     def validate_password(self, value):
-        validate_password(value)
+        if value:
+            validate_password(value)
         return value
 
     def validate_email(self, value):
@@ -724,7 +735,7 @@ class AdminOnboardNurseSerializer(serializers.Serializer):
 
     def create(self, validated_data):
         email = validated_data['email']
-        password = validated_data['password']
+        password = validated_data.get('password') or generate_temporary_password()
 
         with transaction.atomic():
             user = User.objects.create_user(
@@ -746,6 +757,7 @@ class AdminOnboardNurseSerializer(serializers.Serializer):
                 verification_status=VerificationStatus.APPROVED,
                 is_available_now=True
             )
+        user._temporary_password = password
         return user
 
 

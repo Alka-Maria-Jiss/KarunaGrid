@@ -56,7 +56,11 @@ from .serializers import (
     ResetPasswordSerializer,
 )
 
-from .notifications import create_status_notification
+from .notifications import (
+    create_status_notification,
+    send_staff_approval_email,
+    generate_temporary_password,
+)
 
 
 class RegisterView(APIView):
@@ -1220,7 +1224,7 @@ class AdminRejectCaregiverView(APIView):
         )
 
 
-# --- ADMIN STAFF ONBOARDING ENDPOINT ---
+# --- ADMIN STAFF ONBOARDING & APPROVAL ENDPOINTS ---
 
 class AdminCreateStaffView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1234,9 +1238,31 @@ class AdminCreateStaffView(APIView):
             return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.save()
-        role_label = request.data.get('role', 'Staff').title()
+        role_choice = request.data.get('role', 'Staff').title()
+        temp_password = getattr(user, '_temporary_password', None)
+        create_status_notification(user, status=VerificationStatus.APPROVED, role=role_choice)
+
+        email_sent = True
+        if temp_password:
+            try:
+                send_staff_approval_email(user, temp_password)
+            except Exception as e:
+                logger.error(f"[AdminCreateStaffView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                email_sent = False
+
+        if email_sent:
+            msg = f"{role_choice} approved successfully. Login credentials have been sent to the registered email address ({user.email})."
+        else:
+            msg = f"{role_choice} account created and pre-approved, but login credentials email could not be delivered."
+
         return Response(
-            {"message": f"{role_label} account created and pre-approved successfully.", "user_id": user.user_id},
+            {
+                "message": msg,
+                "user_id": user.user_id,
+                "email": user.email,
+                "role": user.role,
+                "email_sent": email_sent,
+            },
             status=status.HTTP_201_CREATED,
         )
 
@@ -1253,14 +1279,29 @@ class AdminOnboardDoctorView(APIView):
             return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.save()
+        temp_password = getattr(user, '_temporary_password', None)
         create_status_notification(user, status=VerificationStatus.APPROVED, role='Doctor')
+
+        email_sent = True
+        if temp_password:
+            try:
+                send_staff_approval_email(user, temp_password)
+            except Exception as e:
+                logger.error(f"[AdminOnboardDoctorView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                email_sent = False
+
+        if email_sent:
+            msg = f"Doctor approved successfully. Login credentials have been sent to the registered email address ({user.email})."
+        else:
+            msg = f"Doctor account for '{request.data.get('name')}' created and pre-approved, but login credentials email could not be delivered."
 
         return Response(
             {
-                "message": f"Doctor account for '{request.data.get('name')}' created and pre-approved successfully.",
+                "message": msg,
                 "user_id": user.user_id,
                 "email": user.email,
                 "role": user.role,
+                "email_sent": email_sent,
             },
             status=status.HTTP_201_CREATED,
         )
@@ -1278,16 +1319,219 @@ class AdminOnboardNurseView(APIView):
             return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         user = serializer.save()
+        temp_password = getattr(user, '_temporary_password', None)
         create_status_notification(user, status=VerificationStatus.APPROVED, role='Nurse')
+
+        email_sent = True
+        if temp_password:
+            try:
+                send_staff_approval_email(user, temp_password)
+            except Exception as e:
+                logger.error(f"[AdminOnboardNurseView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                email_sent = False
+
+        if email_sent:
+            msg = f"Nurse approved successfully. Login credentials have been sent to the registered email address ({user.email})."
+        else:
+            msg = f"Nurse account for '{request.data.get('name')}' created and pre-approved, but login credentials email could not be delivered."
 
         return Response(
             {
-                "message": f"Nurse account for '{request.data.get('name')}' created and pre-approved successfully.",
+                "message": msg,
                 "user_id": user.user_id,
                 "email": user.email,
                 "role": user.role,
+                "email_sent": email_sent,
             },
             status=status.HTTP_201_CREATED,
+        )
+
+
+class AdminApproveDoctorView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, doctor_id, *args, **kwargs):
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        doctor = Doctor.objects.select_related('user').filter(doctor_id=doctor_id).first()
+        if not doctor:
+            return Response({"detail": "Doctor record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if doctor.verification_status != VerificationStatus.PENDING:
+            return Response(
+                {"errors": {"detail": [f"This doctor verification has already been {doctor.verification_status.lower()}."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        temp_password = generate_temporary_password()
+
+        with transaction.atomic():
+            doctor.verification_status = VerificationStatus.APPROVED
+            doctor.rejection_reason = None
+            if hasattr(request.user, 'administrator'):
+                doctor.verified_by_admin = request.user.administrator
+            doctor.save()
+
+            if doctor.user:
+                doctor.user.set_password(temp_password)
+                doctor.user.is_active = True
+                doctor.user.save()
+
+        create_status_notification(doctor.user, status=VerificationStatus.APPROVED, role='Doctor')
+
+        email_sent = True
+        try:
+            send_staff_approval_email(doctor.user, temp_password)
+        except Exception as e:
+            logger.error(f"[AdminApproveDoctorView] Failed to send approval email to {doctor.user.email}: {e}", exc_info=True)
+            email_sent = False
+
+        if email_sent:
+            msg = f"Doctor '{doctor.name}' registration approved successfully. Login credentials have been sent to the registered email address ({doctor.user.email})."
+        else:
+            msg = f"Doctor '{doctor.name}' registration approved successfully, but login credentials email could not be delivered."
+
+        return Response(
+            {
+                "message": msg,
+                "doctor_id": doctor.doctor_id,
+                "email": doctor.user.email if doctor.user else None,
+                "email_sent": email_sent,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AdminRejectDoctorView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, doctor_id, *args, **kwargs):
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        doctor = Doctor.objects.select_related('user').filter(doctor_id=doctor_id).first()
+        if not doctor:
+            return Response({"detail": "Doctor record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if doctor.verification_status != VerificationStatus.PENDING:
+            return Response(
+                {"errors": {"detail": [f"This doctor verification has already been {doctor.verification_status.lower()}."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rejection_reason = request.data.get('rejection_reason', '').strip()
+        if not rejection_reason:
+            return Response(
+                {"errors": {"rejection_reason": ["A rejection reason is required."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        doctor.verification_status = VerificationStatus.REJECTED
+        doctor.rejection_reason = rejection_reason
+        if hasattr(request.user, 'administrator'):
+            doctor.verified_by_admin = request.user.administrator
+        doctor.save()
+
+        create_status_notification(doctor.user, status=VerificationStatus.REJECTED, role='Doctor', rejection_reason=rejection_reason)
+
+        return Response(
+            {"message": f"Doctor '{doctor.name}' verification rejected.", "doctor_id": doctor.doctor_id},
+            status=status.HTTP_200_OK,
+        )
+
+
+class AdminApproveNurseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, nurse_id, *args, **kwargs):
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        nurse = Nurse.objects.select_related('user').filter(nurse_id=nurse_id).first()
+        if not nurse:
+            return Response({"detail": "Nurse record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if nurse.verification_status != VerificationStatus.PENDING:
+            return Response(
+                {"errors": {"detail": [f"This nurse verification has already been {nurse.verification_status.lower()}."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        temp_password = generate_temporary_password()
+
+        with transaction.atomic():
+            nurse.verification_status = VerificationStatus.APPROVED
+            nurse.rejection_reason = None
+            if hasattr(request.user, 'administrator'):
+                nurse.verified_by_admin = request.user.administrator
+            nurse.save()
+
+            if nurse.user:
+                nurse.user.set_password(temp_password)
+                nurse.user.is_active = True
+                nurse.user.save()
+
+        create_status_notification(nurse.user, status=VerificationStatus.APPROVED, role='Nurse')
+
+        email_sent = True
+        try:
+            send_staff_approval_email(nurse.user, temp_password)
+        except Exception as e:
+            logger.error(f"[AdminApproveNurseView] Failed to send approval email to {nurse.user.email}: {e}", exc_info=True)
+            email_sent = False
+
+        if email_sent:
+            msg = f"Nurse '{nurse.name}' verification approved successfully. Login credentials have been sent to the registered email address ({nurse.user.email})."
+        else:
+            msg = f"Nurse '{nurse.name}' verification approved successfully, but login credentials email could not be delivered."
+
+        return Response(
+            {
+                "message": msg,
+                "nurse_id": nurse.nurse_id,
+                "email": nurse.user.email if nurse.user else None,
+                "email_sent": email_sent,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class AdminRejectNurseView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, nurse_id, *args, **kwargs):
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        nurse = Nurse.objects.select_related('user').filter(nurse_id=nurse_id).first()
+        if not nurse:
+            return Response({"detail": "Nurse record not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if nurse.verification_status != VerificationStatus.PENDING:
+            return Response(
+                {"errors": {"detail": [f"This nurse verification has already been {nurse.verification_status.lower()}."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        rejection_reason = request.data.get('rejection_reason', '').strip()
+        if not rejection_reason:
+            return Response(
+                {"errors": {"rejection_reason": ["A rejection reason is required."]}},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        nurse.verification_status = VerificationStatus.REJECTED
+        nurse.rejection_reason = rejection_reason
+        if hasattr(request.user, 'administrator'):
+            nurse.verified_by_admin = request.user.administrator
+        nurse.save()
+
+        create_status_notification(nurse.user, status=VerificationStatus.REJECTED, role='Nurse', rejection_reason=rejection_reason)
+
+        return Response(
+            {"message": f"Nurse '{nurse.name}' verification rejected.", "nurse_id": nurse.nurse_id},
+            status=status.HTTP_200_OK,
         )
 
 
@@ -2271,9 +2515,7 @@ class AdminEquipmentAllocateView(APIView):
             return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
-            eq_request = EquipmentRequest.objects.select_for_update().select_related(
-                'patient', 'equipment_type', 'allocated_unit', 'allocated_by_admin'
-            ).filter(request_id=request_id).first()
+            eq_request = EquipmentRequest.objects.select_for_update().filter(request_id=request_id).first()
 
             if not eq_request:
                 return Response({"detail": "Equipment request not found."}, status=status.HTTP_404_NOT_FOUND)

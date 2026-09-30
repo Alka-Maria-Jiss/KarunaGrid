@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Bell, Check, CheckCheck, RefreshCw, AlertCircle, Clock } from 'lucide-react';
+import apiClient from '../../api/apiClient';
 
 export default function DoctorNotifications({
   onRefreshUnread,
@@ -11,17 +12,9 @@ export default function DoctorNotifications({
   const fetchNotifications = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/notifications/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(Array.isArray(data) ? data : []);
-      }
+      const data = await apiClient.get('/notifications/');
+      const list = data?.notifications || (Array.isArray(data) ? data : []);
+      setNotifications(list);
     } catch (err) {
       console.error('Error fetching notifications:', err);
     } finally {
@@ -35,22 +28,13 @@ export default function DoctorNotifications({
 
   const handleMarkAsRead = async (notificationId) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/notifications/${notificationId}/read/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        setNotifications((prev) =>
-          prev.map((n) =>
-            n.notification_id === notificationId ? { ...n, is_read: true } : n
-          )
-        );
-        if (onRefreshUnread) onRefreshUnread();
-      }
+      await apiClient.post(`/notifications/${notificationId}/read/`);
+      setNotifications((prev) =>
+        prev.map((n) =>
+          n.notification_id === notificationId ? { ...n, is_read: true } : n
+        )
+      );
+      if (onRefreshUnread) onRefreshUnread();
     } catch (err) {
       console.error('Error marking notification as read:', err);
     }
@@ -58,18 +42,9 @@ export default function DoctorNotifications({
 
   const handleMarkAllAsRead = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/notifications/mark-all-read/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-        if (onRefreshUnread) onRefreshUnread();
-      }
+      await apiClient.post('/notifications/read-all/');
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      if (onRefreshUnread) onRefreshUnread();
     } catch (err) {
       console.error('Error marking all notifications read:', err);
     }

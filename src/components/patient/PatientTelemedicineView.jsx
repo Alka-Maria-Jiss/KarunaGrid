@@ -255,7 +255,7 @@ export default function PatientTelemedicineView({
             No Telemedicine Consultations Scheduled
           </h4>
           <p className="text-xs text-[#7b776c] max-w-sm mx-auto">
-            You currently have no active or previous virtual consultations. Click "+ Request Video Consultation" to book an appointment with your doctor.
+            You currently have no active or previous virtual consultations. Click "Request Video Consultation" to book an appointment with your doctor.
           </p>
         </div>
       ) : (

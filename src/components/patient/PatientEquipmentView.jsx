@@ -83,7 +83,7 @@ export default function PatientEquipmentView({
           className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-[#645e45] hover:bg-[#4c472f] rounded-xl shadow-xs transition-all cursor-pointer flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Request Medical Equipment</span>
+          <span>Request Medical Equipment</span>
         </button>
       </div>
 

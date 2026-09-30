@@ -55,7 +55,7 @@ export default function AdminDoctorManagement({
       };
 
       const res = await apiClient.post('/admin/onboard-doctor/', payload);
-      showSuccess(res.message || 'Doctor account created and pre-approved successfully!');
+      showSuccess(res.message || 'Doctor approved successfully. Login credentials have been sent to the registered email address.');
 
       // Reset form
       setName('');
@@ -99,7 +99,7 @@ export default function AdminDoctorManagement({
           className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-[#645e45] hover:bg-[#4c472f] rounded-xl shadow-xs transition-all cursor-pointer flex-shrink-0"
         >
           <UserPlus className="w-4 h-4" />
-          <span>+ Add Doctor (Pre-Approved)</span>
+          <span>Add Doctor (Pre-Approved)</span>
         </button>
       </div>
 

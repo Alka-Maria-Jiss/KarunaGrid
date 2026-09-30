@@ -229,7 +229,7 @@ export default function AdminWelfareSchemes({
           className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-bold text-white bg-[#645e45] hover:bg-[#4c472f] rounded-xl shadow-xs transition-all cursor-pointer flex-shrink-0"
         >
           <Plus className="w-4 h-4" />
-          <span>+ Add Welfare Scheme</span>
+          <span>Add Welfare Scheme</span>
         </button>
       </div>
 
@@ -332,7 +332,7 @@ export default function AdminWelfareSchemes({
           <p className="text-xs text-[#7b776c] max-w-sm mx-auto">
             {searchQuery || selectedCategory !== 'All Categories' || activeTab !== 'all'
               ? 'No schemes match your active filter or search criteria.'
-              : 'There are currently no welfare schemes configured. Click "+ Add Welfare Scheme" to register a government scheme.'}
+              : 'There are currently no welfare schemes configured. Click "Add Welfare Scheme" to register a government scheme.'}
           </p>
           {(searchQuery || selectedCategory !== 'All Categories' || activeTab !== 'all') && (
             <button

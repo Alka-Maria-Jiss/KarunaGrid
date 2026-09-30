@@ -215,6 +215,7 @@ export default function DoctorDashboard({ user, onLogout }) {
         isMobileOpen={isMobileOpen}
         onCloseMobile={() => setIsMobileOpen(false)}
         pendingCount={summary.pending_actions}
+        unreadCount={summary.unread_notifications ?? alerts.length}
       />
 
       {/* MAIN VIEWPORT */}

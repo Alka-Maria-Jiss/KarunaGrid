@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, ShieldCheck } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import heroImg from '../assets/landing_img.png';
 
 export default function Hero({ onOpenRegister, onLearnMore }) {
@@ -27,26 +27,15 @@ export default function Hero({ onOpenRegister, onLearnMore }) {
 
       {/* Hero Content */}
       <div className="relative z-10 w-full max-w-7xl mx-auto px-6 sm:px-10 lg:px-16 pt-[120px] pb-16 flex flex-col items-center justify-center text-center">
-        <div className="max-w-4xl w-full text-center flex flex-col items-center justify-center">
-
-          {/* Phase 1 Badge */}
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: 'easeOut', delay: 0.1 }}
-            className="inline-flex items-center gap-2 px-5 py-2 rounded-full border border-white/40 bg-black/40 backdrop-blur-md text-white text-xs sm:text-sm font-semibold mb-8 tracking-wide shadow-lg"
-          >
-            <ShieldCheck className="w-4 h-4 text-amber-300 shrink-0" />
-            <span>Community Palliative Care Platform</span>
-          </motion.div>
+        <div className="max-w-3xl w-full text-center flex flex-col items-center justify-center">
 
           {/* Main Headline */}
           <motion.h1
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: 'easeOut', delay: 0.2 }}
-            className="font-extrabold text-white leading-[1.15] tracking-tight mb-10 max-w-4xl text-center drop-shadow-xl"
-            style={{ fontSize: 'clamp(2.75rem, 6.5vw, 5rem)' }}
+            transition={{ duration: 0.6, ease: 'easeOut', delay: 0.15 }}
+            className="font-extrabold text-white leading-[1.2] tracking-tight mb-8 max-w-3xl text-center drop-shadow-xl"
+            style={{ fontSize: 'clamp(1.85rem, 3.75vw, 3rem)' }}
           >
             Bringing{' '}
             <span

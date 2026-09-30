@@ -55,7 +55,7 @@ export default function AdminNurseManagement({
       };
 
       const res = await apiClient.post('/admin/onboard-nurse/', payload);
-      showSuccess(res.message || 'Nurse account created and pre-approved successfully!');
+      showSuccess(res.message || 'Nurse approved successfully. Login credentials have been sent to the registered email address.');
 
       // Reset form
       setName('');
@@ -99,7 +99,7 @@ export default function AdminNurseManagement({
           className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-bold text-white bg-[#645e45] hover:bg-[#4c472f] rounded-xl shadow-xs transition-all cursor-pointer flex-shrink-0"
         >
           <UserPlus className="w-4 h-4" />
-          <span>+ Add Nurse (Pre-Approved)</span>
+          <span>Add Nurse (Pre-Approved)</span>
         </button>
       </div>
 

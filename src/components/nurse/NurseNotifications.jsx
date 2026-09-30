@@ -11,6 +11,7 @@ import {
   Clock,
   Inbox
 } from 'lucide-react';
+import apiClient from '../../api/apiClient';
 
 export default function NurseNotifications({
   onNotificationRead = () => {},
@@ -21,17 +22,9 @@ export default function NurseNotifications({
   const fetchNotifications = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/notifications/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setNotifications(Array.isArray(data) ? data : []);
-      }
+      const data = await apiClient.get('/notifications/');
+      const list = data?.notifications || (Array.isArray(data) ? data : []);
+      setNotifications(list);
     } catch (err) {
       console.error('Error fetching notifications:', err);
     } finally {
@@ -45,18 +38,9 @@ export default function NurseNotifications({
 
   const handleMarkRead = async (id) => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/notifications/${id}/read/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        setNotifications(notifications.map((n) => n.notification_id === id ? { ...n, is_read: true } : n));
-        onNotificationRead();
-      }
+      await apiClient.post(`/notifications/${id}/read/`);
+      setNotifications(notifications.map((n) => n.notification_id === id ? { ...n, is_read: true } : n));
+      onNotificationRead();
     } catch (err) {
       console.error('Error marking notification read:', err);
     }
@@ -64,18 +48,9 @@ export default function NurseNotifications({
 
   const handleMarkAllRead = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/notifications/mark-all-read/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        setNotifications(notifications.map((n) => ({ ...n, is_read: true })));
-        onNotificationRead();
-      }
+      await apiClient.post('/notifications/read-all/');
+      setNotifications(notifications.map((n) => ({ ...n, is_read: true })));
+      onNotificationRead();
     } catch (err) {
       console.error('Error marking all notifications read:', err);
     }

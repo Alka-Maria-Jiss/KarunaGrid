@@ -107,7 +107,7 @@ export default function PatientDashboard({ user, onLogout }) {
       // 7. Fetch Notifications
       try {
         const notifRes = await apiClient.get('/notifications/');
-        setNotifications(notifRes || []);
+        setNotifications(notifRes?.notifications || (Array.isArray(notifRes) ? notifRes : []));
       } catch (err) {
         console.warn('Notifications fetch:', err);
       }
