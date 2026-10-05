@@ -64,6 +64,9 @@ VITE_GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ### Backend (Django)
 
 ```bash
+# Navigate to backend directory
+cd backend
+
 # Install dependencies
 pip install -r requirements.txt
 
@@ -74,7 +77,7 @@ python manage.py migrate
 python manage.py check
 
 # Run tests
-python manage.py test accounts --settings=test_settings
+python manage.py test --settings=test_settings
 
 # Start development server
 python manage.py runserver 8000
@@ -83,6 +86,9 @@ python manage.py runserver 8000
 ### Frontend (React + Vite)
 
 ```bash
+# Navigate to frontend directory
+cd frontend
+
 # Install dependencies
 npm install
 

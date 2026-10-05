@@ -131,15 +131,19 @@ OK (0 failures, 0 errors)
 ## 🔁 How to Re-Run Tests Anytime
 
 ```bash
-# 1. Automated API Regression (Newman)
+# 1. Backend Unit & Integration Tests
+cd backend
+python manage.py test --settings=test_settings
+
+# 2. Automated API Regression (Newman)
+cd frontend
 npm run test:api
 
-# 2. Automated End-to-End Tests (Playwright)
+# 3. Automated End-to-End Tests (Playwright)
+cd frontend
 npm run test:e2e
 
-# 3. View Playwright Interactive HTML Report
-npx playwright show-report tests/e2e/html-report
-
-# 4. Backend Unit & Integration Tests
-python manage.py test --settings=test_settings
+# 4. View Playwright Interactive HTML Report
+cd frontend
+npx playwright show-report ../tests/e2e/html-report
 ```
