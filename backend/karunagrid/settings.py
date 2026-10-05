@@ -132,10 +132,23 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'karunagrid.wsgi.application'
 
-# Database configuration using django-environ
-DATABASES = {
-    'default': env.db('DATABASE_URL', default=f"postgres://{env('DB_USER', default='karunagrid_user')}:{env('DB_PASSWORD', default='karunagrid_password')}@{env('DB_HOST', default='127.0.0.1')}:{env('DB_PORT', default='5432')}/{env('DB_NAME', default='karunagrid_db')}")
-}
+# Database configuration
+DATABASE_URL = env('DATABASE_URL', default=None)
+if DATABASE_URL:
+    DATABASES = {
+        'default': env.db('DATABASE_URL')
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': env('DB_NAME', default='karunagrid_db'),
+            'USER': env('DB_USER', default='karunagrid_user'),
+            'PASSWORD': env('DB_PASSWORD', default='karunagrid_password'),
+            'HOST': env('DB_HOST', default='127.0.0.1'),
+            'PORT': env('DB_PORT', default='5432'),
+        }
+    }
 
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
