@@ -1287,33 +1287,37 @@ class AdminOnboardDoctorView(APIView):
         if not serializer.is_valid():
             return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = serializer.save()
-        temp_password = getattr(user, '_temporary_password', None)
-        create_status_notification(user, status=VerificationStatus.APPROVED, role='Doctor')
+        try:
+            user = serializer.save()
+            temp_password = getattr(user, '_temporary_password', None)
+            create_status_notification(user, status=VerificationStatus.APPROVED, role='Doctor')
 
-        email_sent = True
-        if temp_password:
-            try:
-                send_staff_approval_email(user, temp_password)
-            except Exception as e:
-                logger.error(f"[AdminOnboardDoctorView] Failed to send approval email to {user.email}: {e}", exc_info=True)
-                email_sent = False
+            email_sent = True
+            if temp_password:
+                try:
+                    send_staff_approval_email(user, temp_password)
+                except Exception as e:
+                    logger.error(f"[AdminOnboardDoctorView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                    email_sent = False
 
-        if email_sent:
-            msg = f"Doctor approved successfully. Login credentials have been sent to the registered email address ({user.email})."
-        else:
-            msg = f"Doctor account for '{request.data.get('name')}' created and pre-approved, but login credentials email could not be delivered."
+            if email_sent:
+                msg = f"Doctor approved successfully. Login credentials have been sent to the registered email address ({user.email})."
+            else:
+                msg = f"Doctor account for '{request.data.get('name')}' created and pre-approved, but login credentials email could not be delivered."
 
-        return Response(
-            {
-                "message": msg,
-                "user_id": user.user_id,
-                "email": user.email,
-                "role": user.role,
-                "email_sent": email_sent,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+            return Response(
+                {
+                    "message": msg,
+                    "user_id": user.user_id,
+                    "email": user.email,
+                    "role": user.role,
+                    "email_sent": email_sent,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as err:
+            logger.error(f"[AdminOnboardDoctorView] Error onboarding doctor: {err}", exc_info=True)
+            return Response({"detail": f"Failed to onboard doctor: {str(err)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AdminOnboardNurseView(APIView):
@@ -1327,33 +1331,37 @@ class AdminOnboardNurseView(APIView):
         if not serializer.is_valid():
             return Response({"errors": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
-        user = serializer.save()
-        temp_password = getattr(user, '_temporary_password', None)
-        create_status_notification(user, status=VerificationStatus.APPROVED, role='Nurse')
+        try:
+            user = serializer.save()
+            temp_password = getattr(user, '_temporary_password', None)
+            create_status_notification(user, status=VerificationStatus.APPROVED, role='Nurse')
 
-        email_sent = True
-        if temp_password:
-            try:
-                send_staff_approval_email(user, temp_password)
-            except Exception as e:
-                logger.error(f"[AdminOnboardNurseView] Failed to send approval email to {user.email}: {e}", exc_info=True)
-                email_sent = False
+            email_sent = True
+            if temp_password:
+                try:
+                    send_staff_approval_email(user, temp_password)
+                except Exception as e:
+                    logger.error(f"[AdminOnboardNurseView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                    email_sent = False
 
-        if email_sent:
-            msg = f"Nurse approved successfully. Login credentials have been sent to the registered email address ({user.email})."
-        else:
-            msg = f"Nurse account for '{request.data.get('name')}' created and pre-approved, but login credentials email could not be delivered."
+            if email_sent:
+                msg = f"Nurse approved successfully. Login credentials have been sent to the registered email address ({user.email})."
+            else:
+                msg = f"Nurse account for '{request.data.get('name')}' created and pre-approved, but login credentials email could not be delivered."
 
-        return Response(
-            {
-                "message": msg,
-                "user_id": user.user_id,
-                "email": user.email,
-                "role": user.role,
-                "email_sent": email_sent,
-            },
-            status=status.HTTP_201_CREATED,
-        )
+            return Response(
+                {
+                    "message": msg,
+                    "user_id": user.user_id,
+                    "email": user.email,
+                    "role": user.role,
+                    "email_sent": email_sent,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        except Exception as err:
+            logger.error(f"[AdminOnboardNurseView] Error onboarding nurse: {err}", exc_info=True)
+            return Response({"detail": f"Failed to onboard nurse: {str(err)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AdminApproveDoctorView(APIView):
@@ -1373,43 +1381,47 @@ class AdminApproveDoctorView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        temp_password = generate_temporary_password()
-
-        with transaction.atomic():
-            doctor.verification_status = VerificationStatus.APPROVED
-            doctor.rejection_reason = None
-            if hasattr(request.user, 'administrator'):
-                doctor.verified_by_admin = request.user.administrator
-            doctor.save()
-
-            if doctor.user:
-                doctor.user.set_password(temp_password)
-                doctor.user.is_active = True
-                doctor.user.save()
-
-        create_status_notification(doctor.user, status=VerificationStatus.APPROVED, role='Doctor')
-
-        email_sent = True
         try:
-            send_staff_approval_email(doctor.user, temp_password)
-        except Exception as e:
-            logger.error(f"[AdminApproveDoctorView] Failed to send approval email to {doctor.user.email}: {e}", exc_info=True)
-            email_sent = False
+            temp_password = generate_temporary_password()
 
-        if email_sent:
-            msg = f"Doctor '{doctor.name}' registration approved successfully. Login credentials have been sent to the registered email address ({doctor.user.email})."
-        else:
-            msg = f"Doctor '{doctor.name}' registration approved successfully, but login credentials email could not be delivered."
+            with transaction.atomic():
+                doctor.verification_status = VerificationStatus.APPROVED
+                doctor.rejection_reason = None
+                if hasattr(request.user, 'administrator'):
+                    doctor.verified_by_admin = request.user.administrator
+                doctor.save()
 
-        return Response(
-            {
-                "message": msg,
-                "doctor_id": doctor.doctor_id,
-                "email": doctor.user.email if doctor.user else None,
-                "email_sent": email_sent,
-            },
-            status=status.HTTP_200_OK,
-        )
+                if doctor.user:
+                    doctor.user.set_password(temp_password)
+                    doctor.user.is_active = True
+                    doctor.user.save()
+
+            create_status_notification(doctor.user, status=VerificationStatus.APPROVED, role='Doctor')
+
+            email_sent = True
+            try:
+                send_staff_approval_email(doctor.user, temp_password)
+            except Exception as e:
+                logger.error(f"[AdminApproveDoctorView] Failed to send approval email to {doctor.user.email}: {e}", exc_info=True)
+                email_sent = False
+
+            if email_sent:
+                msg = f"Doctor '{doctor.name}' registration approved successfully. Login credentials have been sent to the registered email address ({doctor.user.email})."
+            else:
+                msg = f"Doctor '{doctor.name}' registration approved successfully, but login credentials email could not be delivered."
+
+            return Response(
+                {
+                    "message": msg,
+                    "doctor_id": doctor.doctor_id,
+                    "email": doctor.user.email if doctor.user else None,
+                    "email_sent": email_sent,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except Exception as err:
+            logger.error(f"[AdminApproveDoctorView] Error approving doctor: {err}", exc_info=True)
+            return Response({"detail": f"Failed to approve doctor: {str(err)}"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class AdminRejectDoctorView(APIView):

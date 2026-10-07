@@ -92,15 +92,29 @@ def send_staff_approval_email(user, temporary_password):
 
     # Determine role and staff name
     role = getattr(user, 'role', None)
-    if role == Role.DOCTOR or hasattr(user, 'doctor'):
+    if role == Role.DOCTOR or str(role).capitalize() == 'Doctor':
         role_title = 'Doctor'
-        doctor_obj = getattr(user, 'doctor', None)
+        doctor_obj = None
+        try:
+            doctor_obj = getattr(user, 'doctor', None)
+        except Exception:
+            pass
+        if not doctor_obj:
+            from accounts.models import Doctor
+            doctor_obj = Doctor.objects.filter(user=user).first()
         name = doctor_obj.name if doctor_obj and doctor_obj.name else 'Doctor'
         greeting = f"Dear Dr. {name},"
         subject = "Your KarunaGrid Doctor Account Has Been Approved"
-    elif role == Role.NURSE or hasattr(user, 'nurse'):
+    elif role == Role.NURSE or str(role).capitalize() == 'Nurse':
         role_title = 'Nurse'
-        nurse_obj = getattr(user, 'nurse', None)
+        nurse_obj = None
+        try:
+            nurse_obj = getattr(user, 'nurse', None)
+        except Exception:
+            pass
+        if not nurse_obj:
+            from accounts.models import Nurse
+            nurse_obj = Nurse.objects.filter(user=user).first()
         name = nurse_obj.name if nurse_obj and nurse_obj.name else 'Nurse'
         greeting = f"Dear Nurse {name},"
         subject = "Your KarunaGrid Nurse Account Has Been Approved"
