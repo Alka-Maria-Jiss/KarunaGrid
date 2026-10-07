@@ -150,6 +150,10 @@ else:
         }
     }
 
+# Enable persistent database connection pooling (reduces request latency significantly)
+DATABASES['default']['CONN_MAX_AGE'] = env.int('CONN_MAX_AGE', default=600)
+DATABASES['default']['CONN_HEALTH_CHECKS'] = True
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
