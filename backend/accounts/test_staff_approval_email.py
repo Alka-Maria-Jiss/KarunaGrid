@@ -22,6 +22,8 @@ from accounts.models import (
 )
 class StaffApprovalEmailTests(TestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         self.client = APIClient()
         self.login_url = '/api/login/'
         mail.outbox = []
@@ -387,10 +389,10 @@ class StaffApprovalEmailTests(TestCase):
         self.assertEqual(mail.outbox[1].to, ['staff.nurse@example.com'])
         self.assertIn('Nurse', mail.outbox[1].subject)
 
-    @patch('accounts.notifications.send_mail')
-    def test_11_email_delivery_failure_handled_gracefully(self, mock_send_mail):
-        """If send_mail fails, API still completes creation but reports email_sent=False without crashing."""
-        mock_send_mail.side_effect = Exception("SMTP Connection Timeout")
+    @patch('accounts.notifications.robust_send_mail')
+    def test_11_email_delivery_failure_handled_gracefully(self, mock_robust_send_mail):
+        """If robust_send_mail fails, API still completes creation but reports email_sent=False without crashing."""
+        mock_robust_send_mail.side_effect = Exception("SMTP Connection Timeout")
         self.client.force_authenticate(user=self.admin_user)
 
         res = self.client.post('/api/admin/onboard-doctor/', {

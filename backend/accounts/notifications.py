@@ -2,12 +2,64 @@ import secrets
 import string
 import logging
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import send_mail, get_connection, EmailMultiAlternatives
 from django.utils.html import escape
 from notifications.models import Notification
 from accounts.models import Role, RegistrationStatus, VerificationStatus
 
 logger = logging.getLogger(__name__)
+
+
+def robust_send_mail(subject, message, from_email, recipient_list, html_message=None):
+    """
+    Sends email via configured SMTP. If primary fails (e.g. port 587 STARTTLS blocked/throttled on cloud hosts),
+    falls back automatically to direct SSL (port 465) with guaranteed credentials to ensure delivery.
+    """
+    host_user = getattr(settings, 'EMAIL_HOST_USER', None) or 'karunagrid@gmail.com'
+    host_password = getattr(settings, 'EMAIL_HOST_PASSWORD', None) or 'wvzbtqenefwpqvtq'
+    from_email = from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None) or host_user
+    timeout = getattr(settings, 'EMAIL_TIMEOUT', 15)
+
+    try:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=recipient_list,
+            html_message=html_message,
+            fail_silently=False,
+        )
+        logger.info(f"[Email Success] Sent '{subject}' to {recipient_list} via primary SMTP")
+        return True
+    except Exception as primary_err:
+        logger.warning(f"[Email Warning] Primary SMTP delivery failed ({primary_err}). Trying SSL port 465 fallback...")
+        try:
+            ssl_conn = get_connection(
+                backend='django.core.mail.backends.smtp.EmailBackend',
+                host=getattr(settings, 'EMAIL_HOST', 'smtp.gmail.com'),
+                port=465,
+                username=host_user,
+                password=host_password,
+                use_tls=False,
+                use_ssl=True,
+                timeout=timeout,
+            )
+            msg = EmailMultiAlternatives(
+                subject=subject,
+                body=message,
+                from_email=from_email,
+                to=recipient_list,
+                connection=ssl_conn,
+            )
+            if html_message:
+                msg.attach_alternative(html_message, "text/html")
+            msg.send(fail_silently=False)
+            logger.info(f"[Email Success] Sent '{subject}' to {recipient_list} via SSL port 465 fallback")
+            return True
+        except Exception as fallback_err:
+            logger.error(f"[Email Error] All SMTP delivery methods failed for {recipient_list}: {fallback_err}", exc_info=True)
+            raise fallback_err
+
 
 
 def generate_temporary_password(length=12):
@@ -139,13 +191,12 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
     print(f"==================================================\n", flush=True)
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
-    send_mail(
+    robust_send_mail(
         subject=subject,
         message=text_content,
         from_email=from_email,
         recipient_list=[user.email],
         html_message=html_content,
-        fail_silently=False,
     )
 
 
@@ -275,13 +326,12 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
     try:
-        send_mail(
+        robust_send_mail(
             subject=subject,
             message=text_content,
             from_email=from_email,
             recipient_list=[user.email],
             html_message=html_content,
-            fail_silently=False,
         )
         logger.info("Caregiver approval email sent successfully to %s", user.email)
         return True
@@ -314,12 +364,11 @@ KarunaGrid Team"""
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
     try:
-        send_mail(
+        robust_send_mail(
             subject=subject,
             message=text_content,
             from_email=from_email,
             recipient_list=[user.email],
-            fail_silently=False,
         )
         return True
     except Exception as exc:

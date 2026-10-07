@@ -28,6 +28,8 @@ from accounts.models import (
 )
 class ForgotPasswordTests(TestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         self.client = APIClient()
         self.request_otp_url = '/api/auth/forgot-password/request-otp/'
         self.resend_otp_url = '/api/auth/forgot-password/resend-otp/'
@@ -429,7 +431,7 @@ class ForgotPasswordTests(TestCase):
         res_ver = self.client.post(self.verify_otp_url, {'username': 'unapproved.applicant@gmail.com', 'otp': '123456'}, format='json')
         self.assertEqual(res_ver.status_code, status.HTTP_400_BAD_REQUEST)
 
-    @patch('accounts.views.send_mail')
+    @patch('accounts.views.robust_send_mail')
     def test_22_email_sending_failure_handled_safely(self, mock_send_mail):
         """22. Email sending failure is handled safely without leaking internals."""
         mock_send_mail.side_effect = Exception("SMTP Connection timed out")

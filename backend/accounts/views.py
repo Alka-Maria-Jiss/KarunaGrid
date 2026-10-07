@@ -61,6 +61,7 @@ from .notifications import (
     create_status_notification,
     send_staff_approval_email,
     generate_temporary_password,
+    robust_send_mail,
 )
 
 
@@ -403,13 +404,12 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
     print(f"==================================================\n", flush=True)
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
-    send_mail(
+    robust_send_mail(
         subject=subject,
         message=text_content,
         from_email=from_email,
         recipient_list=[to_email],
         html_message=html_content,
-        fail_silently=False,
     )
 
 
