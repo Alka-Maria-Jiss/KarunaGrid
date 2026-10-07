@@ -45,6 +45,32 @@ class Command(BaseCommand):
             admin_profile.name = name
             admin_profile.save()
 
+        # Ensure PostgreSQL sequences are synchronized to avoid primary key collision
+        try:
+            from django.db import connection
+            if connection.vendor == 'postgresql':
+                with connection.cursor() as cursor:
+                    cursor.execute("""
+                        DO $$
+                        DECLARE
+                            r RECORD;
+                        BEGIN
+                            FOR r IN
+                                SELECT c.relname AS seq_name, t.relname AS table_name, a.attname AS col_name
+                                FROM pg_class c
+                                JOIN pg_depend d ON d.objid = c.oid
+                                JOIN pg_class t ON t.oid = d.refobjid
+                                JOIN pg_attribute a ON (a.attrelid = d.refobjid AND a.attnum = d.refobjsubid)
+                                WHERE c.relkind = 'S' AND t.relkind = 'r'
+                            LOOP
+                                EXECUTE format('SELECT setval(%L, COALESCE((SELECT MAX(%I) FROM %I), 1))', r.seq_name, r.col_name, r.table_name);
+                            END LOOP;
+                        END $$;
+                    """)
+                self.stdout.write(self.style.SUCCESS("PostgreSQL sequences synchronized successfully."))
+        except Exception as seq_err:
+            self.stdout.write(self.style.WARNING(f"Sequence sync warning: {seq_err}"))
+
         self.stdout.write(self.style.SUCCESS(
             f"\n[OK] Admin Account Ready!\nEmail: {email}\nPassword: {password}\nRole: Administrator"
         ))
