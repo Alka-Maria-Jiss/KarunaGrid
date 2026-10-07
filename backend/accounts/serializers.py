@@ -697,9 +697,9 @@ class AdminOnboardDoctorSerializer(serializers.Serializer):
             doctor = Doctor.objects.create(
                 user=user,
                 name=validated_data['name'],
-                specialization=validated_data['specialization'],
-                service_area=validated_data['service_area'],
-                phone=validated_data['phone'],
+                specialization=validated_data.get('specialization', 'Palliative Medicine'),
+                service_area=validated_data.get('service_area', ''),
+                phone=validated_data.get('phone', ''),
                 gender=validated_data.get('gender', ''),
                 date_of_birth=validated_data.get('date_of_birth'),
                 qualification=validated_data.get('qualification', ''),
@@ -747,13 +747,13 @@ class AdminOnboardNurseSerializer(serializers.Serializer):
             nurse = Nurse.objects.create(
                 user=user,
                 name=validated_data['name'],
-                service_area=validated_data['service_area'],
-                phone=validated_data['phone'],
+                service_area=validated_data.get('service_area', ''),
+                phone=validated_data.get('phone', ''),
                 gender=validated_data.get('gender', ''),
                 date_of_birth=validated_data.get('date_of_birth'),
                 qualification=validated_data.get('qualification', ''),
                 experience=validated_data.get('experience', 0),
-                specialization=validated_data.get('specialization', ''),
+                specialization=validated_data.get('specialization', 'Palliative Nursing'),
                 verification_status=VerificationStatus.APPROVED,
                 is_available_now=True
             )
