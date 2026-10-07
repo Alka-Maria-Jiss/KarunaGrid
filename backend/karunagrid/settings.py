@@ -91,6 +91,7 @@ REST_FRAMEWORK = {
         'password_reset_verify': '10/min',
         'password_reset_action': '5/min',
     },
+    'EXCEPTION_HANDLER': 'karunagrid.exception_handler.custom_exception_handler',
 }
 
 # Email configuration
