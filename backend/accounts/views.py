@@ -60,6 +60,7 @@ from .serializers import (
 from .notifications import (
     create_status_notification,
     send_staff_approval_email,
+    send_staff_approval_email_async,
     generate_temporary_password,
     robust_send_mail,
 )
@@ -1254,9 +1255,9 @@ class AdminCreateStaffView(APIView):
         email_sent = True
         if temp_password:
             try:
-                send_staff_approval_email(user, temp_password)
+                send_staff_approval_email_async(user, temp_password)
             except Exception as e:
-                logger.error(f"[AdminCreateStaffView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                logger.error(f"[AdminCreateStaffView] Failed to dispatch approval email to {user.email}: {e}", exc_info=True)
                 email_sent = False
 
         if email_sent:
@@ -1295,9 +1296,9 @@ class AdminOnboardDoctorView(APIView):
             email_sent = True
             if temp_password:
                 try:
-                    send_staff_approval_email(user, temp_password)
+                    send_staff_approval_email_async(user, temp_password)
                 except Exception as e:
-                    logger.error(f"[AdminOnboardDoctorView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                    logger.error(f"[AdminOnboardDoctorView] Failed to dispatch approval email to {user.email}: {e}", exc_info=True)
                     email_sent = False
 
             if email_sent:
@@ -1339,9 +1340,9 @@ class AdminOnboardNurseView(APIView):
             email_sent = True
             if temp_password:
                 try:
-                    send_staff_approval_email(user, temp_password)
+                    send_staff_approval_email_async(user, temp_password)
                 except Exception as e:
-                    logger.error(f"[AdminOnboardNurseView] Failed to send approval email to {user.email}: {e}", exc_info=True)
+                    logger.error(f"[AdminOnboardNurseView] Failed to dispatch approval email to {user.email}: {e}", exc_info=True)
                     email_sent = False
 
             if email_sent:
@@ -1400,9 +1401,9 @@ class AdminApproveDoctorView(APIView):
 
             email_sent = True
             try:
-                send_staff_approval_email(doctor.user, temp_password)
+                send_staff_approval_email_async(doctor.user, temp_password)
             except Exception as e:
-                logger.error(f"[AdminApproveDoctorView] Failed to send approval email to {doctor.user.email}: {e}", exc_info=True)
+                logger.error(f"[AdminApproveDoctorView] Failed to dispatch approval email to {doctor.user.email}: {e}", exc_info=True)
                 email_sent = False
 
             if email_sent:
@@ -1497,9 +1498,9 @@ class AdminApproveNurseView(APIView):
 
         email_sent = True
         try:
-            send_staff_approval_email(nurse.user, temp_password)
+            send_staff_approval_email_async(nurse.user, temp_password)
         except Exception as e:
-            logger.error(f"[AdminApproveNurseView] Failed to send approval email to {nurse.user.email}: {e}", exc_info=True)
+            logger.error(f"[AdminApproveNurseView] Failed to dispatch approval email to {nurse.user.email}: {e}", exc_info=True)
             email_sent = False
 
         if email_sent:

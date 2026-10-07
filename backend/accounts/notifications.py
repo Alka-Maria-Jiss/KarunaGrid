@@ -214,6 +214,26 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
     )
 
 
+def send_staff_approval_email_async(user, temporary_password):
+    """
+    Spawns a background thread to send the staff approval email asynchronously,
+    preventing HTTP request blocking and Gunicorn proxy timeouts in production.
+    In testing/locmem environments, executes synchronously to ensure deterministic test assertions.
+    """
+    if getattr(settings, 'EMAIL_BACKEND', None) == 'django.core.mail.backends.locmem.EmailBackend':
+        return send_staff_approval_email(user, temporary_password)
+
+    import threading
+    t = threading.Thread(
+        target=send_staff_approval_email,
+        args=(user, temporary_password),
+        daemon=True,
+        name=f"email-approval-{getattr(user, 'email', 'staff')}"
+    )
+    t.start()
+    return t
+
+
 def create_status_notification(user, status, role, rejection_reason=None):
     """
     Creates an in-app notification record for Patient, Caregiver, Doctor, or Nurse registration status change.
