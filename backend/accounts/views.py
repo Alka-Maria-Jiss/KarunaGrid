@@ -1866,7 +1866,8 @@ class AdminUserListView(APIView):
             status_label = "Active" if u.is_active else "Deactivated"
 
             if u.role == Role.DOCTOR and hasattr(u, 'doctor'):
-                name = f"Dr. {u.doctor.name}"
+                raw_name = (u.doctor.name or "").strip()
+                name = raw_name if raw_name.lower().startswith("dr.") else f"Dr. {raw_name}"
                 phone = u.doctor.phone or ""
                 address = u.doctor.service_area or ""
                 details = {
@@ -1875,7 +1876,8 @@ class AdminUserListView(APIView):
                     "verification_status": u.doctor.verification_status,
                 }
             elif u.role == Role.NURSE and hasattr(u, 'nurse'):
-                name = f"Nurse {u.nurse.name}"
+                raw_name = (u.nurse.name or "").strip()
+                name = raw_name if raw_name.lower().startswith("nurse") else f"Nurse {raw_name}"
                 phone = u.nurse.phone or ""
                 address = u.nurse.service_area or ""
                 details = {
@@ -1955,6 +1957,33 @@ class AdminUserToggleStatusView(APIView):
             "message": f"User account '{target_user.email}' has been {action_word}.",
             "user_id": target_user.user_id,
             "is_active": target_user.is_active,
+        }, status=status.HTTP_200_OK)
+
+
+class AdminUserDeleteView(APIView):
+    """
+    Enables Administrator to permanently delete user accounts and their associated profiles.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def delete(self, request, user_id, *args, **kwargs):
+        if request.user.role != Role.ADMIN:
+            return Response({"detail": "Access restricted to Administrators only."}, status=status.HTTP_403_FORBIDDEN)
+
+        target_user = User.objects.filter(user_id=user_id).first()
+        if not target_user:
+            return Response({"detail": "User not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if target_user.user_id == request.user.user_id:
+            return Response({"detail": "You cannot delete your own administrator account."}, status=status.HTTP_400_BAD_REQUEST)
+
+        deleted_email = target_user.email
+        deleted_role = target_user.role
+        target_user.delete()
+
+        return Response({
+            "message": f"{deleted_role.title()} account '{deleted_email}' has been permanently deleted.",
+            "user_id": user_id,
         }, status=status.HTTP_200_OK)
 
 

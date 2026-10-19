@@ -272,32 +272,39 @@ def create_status_notification(user, status, role, rejection_reason=None):
 def send_caregiver_approval_email(user, caregiver_obj=None, nurse_name=None):
     """
     Sends an approval confirmation email to an approved Caregiver with login and portal instructions.
+    Confirms acceptance into the KarunaGrid Care Network without exposing passwords or sensitive details.
     """
     if not user or not user.email:
         raise ValueError("A valid user with an email address is required to send caregiver approval email.")
 
     caregiver_name = caregiver_obj.name if caregiver_obj and caregiver_obj.name else "Caregiver"
-    approver_text = f"by Nurse {nurse_name}" if nurse_name else "by the Community Nursing Team"
+    approver_text = f"by Community Nurse {nurse_name}" if nurse_name else "by the Community Nursing Team"
 
-    subject = "KarunaGrid Caregiver Registration Approved"
+    subject = "KarunaGrid Caregiver Registration Approved - Welcome to the Care Network"
     
     text_content = f"""Dear {caregiver_name},
 
-Your caregiver registration for KarunaGrid has been approved {approver_text}.
+Congratulations! We are pleased to confirm that you have been accepted into the KarunaGrid Care Network.
 
-Username / Email: {user.email}
+Your caregiver registration has been verified and approved {approver_text}. You are now authorized to receive patient care requests and provide home palliative support.
 
-You can now log in to KarunaGrid and access your caregiver dashboard.
+Your Account Details:
+- Role: Certified Community Caregiver
+- Registered Username / Email: {user.email}
+- Account Status: Approved & Active
 
-Next Steps:
-1. Log in to your KarunaGrid Caregiver Portal at http://localhost:5173/login
-2. Review your patient care requests and manage your availability.
-3. For security, please update your password after your first login if needed.
+How to Access the Caregiver Portal:
+1. Visit the KarunaGrid login portal at http://localhost:5173/login
+2. Sign in using your registered email address ({user.email}) and the password you set during registration.
+3. Access your Caregiver Dashboard to review incoming patient requests, manage active care assignments, and coordinate with community nursing teams.
 
-If you have any questions, please coordinate with your local community palliative care nurse.
+Security Reminder:
+For your protection, never share your account credentials with anyone. If you ever need to reset your password, you can use the 'Forgot Password' link on the login page.
 
-Regards,
-KarunaGrid Nursing Team
+If you have any questions or require clinical coordination support, please contact your local community palliative care nurse.
+
+Warm regards,
+KarunaGrid Community Nursing Team
 Community Palliative Care Coordination Platform"""
 
     html_content = f"""<!DOCTYPE html>
@@ -306,7 +313,7 @@ Community Palliative Care Coordination Platform"""
 <meta charset="utf-8">
 <style>
 body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fff9ef; margin: 0; padding: 20px; color: #1e1b14; }}
-.card {{ background-color: #ffffff; max-width: 540px; margin: 0 auto; border-radius: 16px; border: 1px solid #cbc6ba; padding: 32px; box-shadow: 0 4px 16px rgba(100, 94, 69, 0.08); }}
+.card {{ background-color: #ffffff; max-width: 560px; margin: 0 auto; border-radius: 16px; border: 1px solid #cbc6ba; padding: 32px; box-shadow: 0 4px 16px rgba(100, 94, 69, 0.08); }}
 .brand {{ font-size: 22px; font-weight: 800; color: #645e45; margin-bottom: 16px; }}
 .badge {{ display: inline-block; padding: 4px 12px; background-color: #d1fae5; color: #065f46; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; border: 1px solid #a7f3d0; }}
 .greeting {{ font-size: 16px; font-weight: 700; color: #1e1b14; margin-bottom: 12px; }}
@@ -314,20 +321,25 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
 .credentials-box {{ background-color: #faf7f0; border: 1px solid #e0d9cc; border-radius: 12px; padding: 18px 20px; margin: 20px 0; }}
 .cred-row {{ margin-bottom: 8px; font-size: 13px; }}
 .cred-row:last-child {{ margin-bottom: 0; }}
-.cred-label {{ font-weight: 700; color: #7b776c; display: inline-block; width: 140px; }}
+.cred-label {{ font-weight: 700; color: #7b776c; display: inline-block; width: 150px; }}
 .cred-value {{ font-weight: 700; color: #1e1b14; }}
+.steps-box {{ background-color: #fdfbf7; border: 1px solid #ede4d5; border-radius: 12px; padding: 16px 20px; margin: 20px 0; }}
+.step-item {{ font-size: 13px; line-height: 1.6; color: #4a473d; margin-bottom: 6px; }}
+.step-item:last-child {{ margin-bottom: 0; }}
 .security-note {{ background-color: #fff8e6; border-left: 4px solid #d99b26; padding: 12px 16px; margin: 20px 0; border-radius: 0 8px 8px 0; font-size: 12px; line-height: 1.5; color: #73510d; }}
-.btn {{ display: inline-block; background-color: #645e45; color: #ffffff; padding: 10px 20px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 13px; margin: 12px 0; }}
 .footer {{ font-size: 12px; color: #7b776c; margin-top: 28px; border-top: 1px solid #eee7da; padding-top: 16px; line-height: 1.5; }}
 </style>
 </head>
 <body>
 <div class="card">
   <div class="brand">KarunaGrid</div>
-  <div class="badge">Caregiver Registration Approved</div>
+  <div class="badge">Accepted into KarunaGrid Care Network</div>
   <div class="greeting">Dear {escape(caregiver_name)},</div>
   <div class="message">
-    Your caregiver registration for KarunaGrid has been approved {escape(approver_text)}.
+    Congratulations! We are pleased to confirm that <strong>you have been accepted into the KarunaGrid Care Network</strong>.
+  </div>
+  <div class="message">
+    Your caregiver registration has been verified and approved {escape(approver_text)}. You are now authorized to receive patient care requests and provide home palliative support.
   </div>
   <div class="credentials-box">
     <div class="cred-row">
@@ -335,21 +347,25 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
       <span class="cred-value">Certified Community Caregiver</span>
     </div>
     <div class="cred-row">
-      <span class="cred-label">Username:</span>
+      <span class="cred-label">Username / Email:</span>
       <span class="cred-value">{escape(user.email)}</span>
     </div>
     <div class="cred-row">
-      <span class="cred-label">Status:</span>
+      <span class="cred-label">Verification Status:</span>
       <span class="cred-value" style="color: #065f46;">Approved & Active</span>
     </div>
   </div>
-  <div class="message">
-    You can now log in to KarunaGrid, receive patient care assignments, and coordinate palliative support.
+  <div class="steps-box">
+    <strong style="font-size: 13px; color: #645e45; display: block; margin-bottom: 8px;">How to Access the Caregiver Portal:</strong>
+    <div class="step-item">1. Open the KarunaGrid login portal at <a href="http://localhost:5173/login" style="color: #645e45; font-weight: 700;">http://localhost:5173/login</a></div>
+    <div class="step-item">2. Sign in using your registered email address and the password you set during registration.</div>
+    <div class="step-item">3. Review incoming patient care requests and manage your active palliative care assignments.</div>
   </div>
   <div class="security-note">
-    <strong>Security Notice:</strong> For your security, please update your password after your first login.
+    <strong>Security Notice:</strong> For your security, passwords are never sent via plain email. Please keep your login credentials confidential and do not share them with anyone.
   </div>
   <div class="footer">
+    If you have any questions or require assistance, please coordinate with your local community palliative care nurse.<br><br>
     Regards,<br>
     <strong>KarunaGrid Community Nursing Team</strong><br>
     Community Palliative Care Coordination Platform
@@ -374,9 +390,29 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
         return False
 
 
+def send_caregiver_approval_email_async(user, caregiver_obj=None, nurse_name=None):
+    """
+    Spawns a background thread to send the caregiver approval email asynchronously,
+    preventing HTTP request blocking and Gunicorn proxy timeouts in production.
+    In testing/locmem environments, executes synchronously to ensure deterministic test assertions.
+    """
+    if getattr(settings, 'EMAIL_BACKEND', None) == 'django.core.mail.backends.locmem.EmailBackend':
+        return send_caregiver_approval_email(user, caregiver_obj, nurse_name)
+
+    import threading
+    t = threading.Thread(
+        target=send_caregiver_approval_email,
+        args=(user, caregiver_obj, nurse_name),
+        daemon=True,
+        name=f"email-caregiver-approval-{getattr(user, 'email', 'cg')}"
+    )
+    t.start()
+    return t
+
+
 def send_caregiver_rejection_email(user, caregiver_obj=None, rejection_reason="Application did not meet requirements"):
     """
-    Sends a polite rejection notification email to a Caregiver applicant.
+    Sends a polite rejection notification email to a Caregiver applicant with mandatory reason and branded styling.
     """
     if not user or not user.email:
         return False
@@ -385,16 +421,60 @@ def send_caregiver_rejection_email(user, caregiver_obj=None, rejection_reason="A
     subject = "KarunaGrid Caregiver Registration Update"
     text_content = f"""Dear {caregiver_name},
 
-Thank you for your interest in joining KarunaGrid.
+Thank you for your interest in joining the KarunaGrid Care Network.
 
-After reviewing your caregiver application and documentation, we are unable to approve your account at this time.
+After reviewing your caregiver application and documentation, our community nursing team is unable to approve your registration at this time.
 
-Reason for decision: {rejection_reason}
+Reason for decision:
+{rejection_reason}
 
-If you believe this was in error or have additional certifications to submit, please contact your local community palliative care coordinator.
+If you believe this decision was made in error or if you have updated certifications or documentation to submit, please contact your local community palliative care coordinator.
 
 Regards,
-KarunaGrid Team"""
+KarunaGrid Community Nursing Team
+Community Palliative Care Coordination Platform"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fff9ef; margin: 0; padding: 20px; color: #1e1b14; }}
+.card {{ background-color: #ffffff; max-width: 560px; margin: 0 auto; border-radius: 16px; border: 1px solid #cbc6ba; padding: 32px; box-shadow: 0 4px 16px rgba(100, 94, 69, 0.08); }}
+.brand {{ font-size: 22px; font-weight: 800; color: #645e45; margin-bottom: 16px; }}
+.badge {{ display: inline-block; padding: 4px 12px; background-color: #fee2e2; color: #991b1b; border-radius: 20px; font-size: 12px; font-weight: 700; margin-bottom: 16px; border: 1px solid #fecaca; }}
+.greeting {{ font-size: 16px; font-weight: 700; color: #1e1b14; margin-bottom: 12px; }}
+.message {{ font-size: 14px; line-height: 1.6; color: #4a473d; margin-bottom: 16px; }}
+.reason-box {{ background-color: #fef2f2; border-left: 4px solid #ef4444; padding: 14px 18px; margin: 20px 0; border-radius: 0 8px 8px 0; font-size: 13px; line-height: 1.6; color: #7f1d1d; }}
+.footer {{ font-size: 12px; color: #7b776c; margin-top: 28px; border-top: 1px solid #eee7da; padding-top: 16px; line-height: 1.5; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">KarunaGrid</div>
+  <div class="badge">Registration Status Update</div>
+  <div class="greeting">Dear {escape(caregiver_name)},</div>
+  <div class="message">
+    Thank you for your interest in joining the KarunaGrid Care Network.
+  </div>
+  <div class="message">
+    After reviewing your caregiver application and documentation, our community nursing team is unable to approve your registration at this time.
+  </div>
+  <div class="reason-box">
+    <strong>Reason for Decision:</strong><br>
+    {escape(rejection_reason)}
+  </div>
+  <div class="message">
+    If you believe this decision was made in error or if you have updated certifications to provide, please contact your local community palliative care coordinator.
+  </div>
+  <div class="footer">
+    Regards,<br>
+    <strong>KarunaGrid Community Nursing Team</strong><br>
+    Community Palliative Care Coordination Platform
+  </div>
+</div>
+</body>
+</html>"""
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
     try:
@@ -403,8 +483,31 @@ KarunaGrid Team"""
             message=text_content,
             from_email=from_email,
             recipient_list=[user.email],
+            html_message=html_content,
         )
+        logger.info("Caregiver rejection email sent successfully to %s", user.email)
         return True
     except Exception as exc:
         logger.warning("Failed to send caregiver rejection email to %s: %s", user.email, exc)
         return False
+
+
+def send_caregiver_rejection_email_async(user, caregiver_obj=None, rejection_reason="Application did not meet requirements"):
+    """
+    Spawns a background thread to send the caregiver rejection email asynchronously,
+    preventing HTTP request blocking and Gunicorn proxy timeouts in production.
+    In testing/locmem environments, executes synchronously to ensure deterministic test assertions.
+    """
+    if getattr(settings, 'EMAIL_BACKEND', None) == 'django.core.mail.backends.locmem.EmailBackend':
+        return send_caregiver_rejection_email(user, caregiver_obj, rejection_reason)
+
+    import threading
+    t = threading.Thread(
+        target=send_caregiver_rejection_email,
+        args=(user, caregiver_obj, rejection_reason),
+        daemon=True,
+        name=f"email-caregiver-rejection-{getattr(user, 'email', 'cg')}"
+    )
+    t.start()
+    return t
+

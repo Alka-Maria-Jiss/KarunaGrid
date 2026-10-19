@@ -1,4 +1,5 @@
 import datetime
+from unittest.mock import patch
 from django.test import TestCase
 from django.utils import timezone
 from django.core import mail
@@ -224,6 +225,134 @@ class CaregiverManagementWorkflowTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, [self.cg_user_pending.email])
         self.assertIn("Registration Update", mail.outbox[0].subject)
+
+    def test_caregiver_approval_email_content_and_safety(self):
+        """Approval email confirms acceptance into Care Network, explains portal login, and does not leak passwords."""
+        mail.outbox = []
+        self.client.force_authenticate(user=self.nurse_user)
+        response = self.client.post(f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/approve/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data.get("email_sent"))
+
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(email.to, [self.cg_user_pending.email])
+        self.assertIn("Registration Approved", email.subject)
+        self.assertIn("Care Network", email.subject)
+
+        # Check body content
+        body = email.body
+        self.assertIn("accepted into the KarunaGrid Care Network", body)
+        self.assertIn("How to Access the Caregiver Portal", body)
+        self.assertIn(self.cg_user_pending.email, body)
+        # Ensure password is NOT exposed
+        self.assertNotIn("Temporary Password", body)
+        self.assertNotIn("Password123!", body)
+
+        # Check HTML alternative attached
+        self.assertEqual(len(email.alternatives), 1)
+        html_content, mimetype = email.alternatives[0]
+        self.assertEqual(mimetype, "text/html")
+        self.assertIn("accepted into the KarunaGrid Care Network", html_content)
+        self.assertIn("How to Access the Caregiver Portal", html_content)
+
+    def test_caregiver_rejection_email_content_and_html(self):
+        """Rejection email contains mandatory reason, styled HTML template, and returns email_sent True."""
+        mail.outbox = []
+        self.client.force_authenticate(user=self.nurse_user)
+        rejection_reason = "Missing certified first-aid qualification proof."
+        response = self.client.post(
+            f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/reject/",
+            {"rejection_reason": rejection_reason}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data.get("email_sent"))
+
+        self.assertEqual(len(mail.outbox), 1)
+        email = mail.outbox[0]
+        self.assertEqual(email.to, [self.cg_user_pending.email])
+        self.assertIn("Registration Update", email.subject)
+        self.assertIn(rejection_reason, email.body)
+
+        # Check HTML alternative
+        self.assertEqual(len(email.alternatives), 1)
+        html_content, mimetype = email.alternatives[0]
+        self.assertEqual(mimetype, "text/html")
+        self.assertIn(rejection_reason, html_content)
+        self.assertIn("Reason for Decision", html_content)
+
+    def test_nurse_approval_prevents_duplicate_emails_on_retry(self):
+        """Attempting to re-approve an already approved caregiver is rejected and sends no duplicate email."""
+        mail.outbox = []
+        self.client.force_authenticate(user=self.nurse_user)
+
+        # First approval
+        res1 = self.client.post(f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/approve/")
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+
+        # Second approval attempt (retry / duplicate)
+        res2 = self.client.post(f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/approve/")
+        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("already", self._err_text(res2))
+        # No extra email should be dispatched
+        self.assertEqual(len(mail.outbox), 1)
+
+    def test_nurse_rejection_prevents_duplicate_emails_on_retry(self):
+        """Attempting to re-reject an already rejected caregiver is rejected and sends no duplicate email."""
+        mail.outbox = []
+        self.client.force_authenticate(user=self.nurse_user)
+
+        # First rejection
+        res1 = self.client.post(
+            f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/reject/",
+            {"rejection_reason": "Incomplete profile"}
+        )
+        self.assertEqual(res1.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+
+        # Second rejection attempt
+        res2 = self.client.post(
+            f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/reject/",
+            {"rejection_reason": "Different reason"}
+        )
+        self.assertEqual(res2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("already", self._err_text(res2))
+        # No extra email dispatched
+        self.assertEqual(len(mail.outbox), 1)
+
+    @patch('accounts.notifications.robust_send_mail')
+    def test_caregiver_approval_email_failure_handled_gracefully(self, mock_send_mail):
+        """When SMTP email delivery fails, caregiver approval still commits safely and reports email_sent=False."""
+        mock_send_mail.side_effect = Exception("SMTP Connection Timeout")
+        self.client.force_authenticate(user=self.nurse_user)
+
+        response = self.client.post(f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/approve/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data.get("email_sent"))
+
+        # Database record must still be successfully approved
+        self.cg_pending.refresh_from_db()
+        self.assertEqual(self.cg_pending.verification_status, VerificationStatus.APPROVED)
+        self.assertTrue(self.cg_pending.is_available)
+
+    @patch('accounts.notifications.robust_send_mail')
+    def test_caregiver_rejection_email_failure_handled_gracefully(self, mock_send_mail):
+        """When SMTP email delivery fails, caregiver rejection still commits safely and reports email_sent=False."""
+        mock_send_mail.side_effect = Exception("SMTP Connection Timeout")
+        self.client.force_authenticate(user=self.nurse_user)
+
+        response = self.client.post(
+            f"/api/nurse/caregivers/{self.cg_pending.caregiver_id}/reject/",
+            {"rejection_reason": "Documentation invalid"}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertFalse(response.data.get("email_sent"))
+
+        # Database record must still be successfully rejected
+        self.cg_pending.refresh_from_db()
+        self.assertEqual(self.cg_pending.verification_status, VerificationStatus.REJECTED)
+        self.assertEqual(self.cg_pending.rejection_reason, "Documentation invalid")
 
     # -------------------------------------------------------------
     # 2. PATIENT CAREGIVER BROWSING & REQUESTING WORKFLOW

@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 from datetime import datetime
 from django.db import transaction
 from django.db.models import Q, Avg, Count
@@ -26,8 +27,12 @@ from accounts.views import (
 from accounts.notifications import (
     create_status_notification,
     send_caregiver_approval_email,
+    send_caregiver_approval_email_async,
     send_caregiver_rejection_email,
+    send_caregiver_rejection_email_async,
 )
+
+logger = logging.getLogger(__name__)
 from notifications.models import Notification
 from care_coordination.models import (
     CaregiverRequest,
@@ -135,8 +140,15 @@ class NurseApproveCaregiverView(APIView):
             # Create in-app notification
             create_status_notification(caregiver.user, status=VerificationStatus.APPROVED, role='Caregiver')
 
-            # Send email
-            email_sent = send_caregiver_approval_email(caregiver.user, caregiver, nurse.name)
+            # Send approval email
+            email_sent = True
+            try:
+                result = send_caregiver_approval_email_async(caregiver.user, caregiver, nurse.name)
+                if result is False:
+                    email_sent = False
+            except Exception as e:
+                logger.error(f"[NurseApproveCaregiverView] Failed to dispatch approval email to {caregiver.user.email}: {e}", exc_info=True)
+                email_sent = False
 
         return Response({
             "message": f"Caregiver '{caregiver.name}' has been successfully approved.",
@@ -191,12 +203,20 @@ class NurseRejectCaregiverView(APIView):
             )
 
             # Send rejection email
-            send_caregiver_rejection_email(caregiver.user, caregiver, rejection_reason)
+            email_sent = True
+            try:
+                result = send_caregiver_rejection_email_async(caregiver.user, caregiver, rejection_reason)
+                if result is False:
+                    email_sent = False
+            except Exception as e:
+                logger.error(f"[NurseRejectCaregiverView] Failed to dispatch rejection email to {caregiver.user.email}: {e}", exc_info=True)
+                email_sent = False
 
         return Response({
             "message": f"Caregiver '{caregiver.name}' registration has been rejected.",
             "caregiver_id": caregiver.caregiver_id,
             "verification_status": caregiver.verification_status,
+            "email_sent": email_sent,
         }, status=status.HTTP_200_OK)
 
 

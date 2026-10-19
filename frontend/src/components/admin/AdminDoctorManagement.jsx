@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Stethoscope, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, EyeOff, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Stethoscope, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, EyeOff, X, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
 
@@ -39,6 +39,19 @@ export default function AdminDoctorManagement({
       if (onRefresh) onRefresh();
     } catch (err) {
       showError(err.message || 'Failed to update doctor account status.');
+    }
+  };
+
+  const handleDeleteDoctor = async (doc) => {
+    if (!window.confirm(`Are you sure you want to permanently delete doctor account ${doc.name} (${doc.email})? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      const res = await apiClient.delete(`/admin/users/${doc.user_id}/delete/`);
+      showSuccess(res.message || 'Doctor account removed successfully.');
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      showError(err.message || 'Failed to delete doctor account.');
     }
   };
 
@@ -190,6 +203,14 @@ export default function AdminDoctorManagement({
                           title={doc.is_active ? 'Deactivate Account' : 'Activate Account'}
                         >
                           <Power className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDoctor(doc)}
+                          className="p-1.5 rounded-lg border text-xs font-bold text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition-all cursor-pointer"
+                          title="Delete Doctor Account"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>

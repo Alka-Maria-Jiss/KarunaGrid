@@ -45,6 +45,25 @@ class Command(BaseCommand):
             admin_profile.name = name
             admin_profile.save()
 
+        # Remove deprecated test / dummy doctor accounts
+        test_doctor_emails = [
+            'dr.testlive7@karunagrid.org',
+            'dr.debug.1791354438@gmail.com',
+            'dr.prod.1791354346@gmail.com',
+            'alkamariajiss85+doctor@gmail.com',
+            'dr.prod.1791353884@gmail.com',
+            'dr.staff.1791353500@gmail.com',
+            'dr.prod.1791353326@gmail.com',
+            'dr.prod.1791353251@gmail.com',
+            'dr.verified.1791352989@gmail.com',
+            'dr.test.1791352551@gmail.com',
+            'test.doctor.1791350020@gmail.com',
+            'test.doctor.1791349946@gmail.com',
+        ]
+        deleted_count, _ = User.objects.filter(email__in=test_doctor_emails).delete()
+        if deleted_count > 0:
+            self.stdout.write(self.style.SUCCESS(f"Purged {deleted_count} test doctor user record(s)."))
+
         # Ensure PostgreSQL sequences are synchronized to avoid primary key collision
         try:
             from django.db import connection
