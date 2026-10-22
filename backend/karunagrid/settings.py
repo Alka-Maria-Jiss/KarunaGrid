@@ -103,7 +103,7 @@ EMAIL_USE_SSL = env.bool('EMAIL_USE_SSL', default=False)
 EMAIL_HOST_USER = env('EMAIL_HOST_USER', default='karunagrid@gmail.com')
 EMAIL_HOST_PASSWORD = env('EMAIL_HOST_PASSWORD', default='wvzbtqenefwpqvtq')
 DEFAULT_FROM_EMAIL = env('DEFAULT_FROM_EMAIL', default='karunagrid@gmail.com')
-EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=15)
+EMAIL_TIMEOUT = env.int('EMAIL_TIMEOUT', default=5)
 BREVO_API_KEY = env('BREVO_API_KEY', default='')
 
 SIMPLE_JWT = {

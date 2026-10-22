@@ -21,9 +21,13 @@ from django.conf.urls.static import static
 from django.http import JsonResponse
 
 def root_view(request):
+    brevo_configured = bool(getattr(settings, 'BREVO_API_KEY', ''))
     return JsonResponse({
         "project": "KarunaGrid Care Network API",
         "status": "online",
+        "brevo_configured": brevo_configured,
+        "email_sender": getattr(settings, 'DEFAULT_FROM_EMAIL', ''),
+        "version": "brevo-v2",
         "frontend_url": "http://localhost:5173/",
         "admin_panel": "http://localhost:8000/admin/",
         "api_root": "http://localhost:8000/api/"

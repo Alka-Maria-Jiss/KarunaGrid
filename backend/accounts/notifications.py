@@ -173,8 +173,13 @@ def send_staff_approval_email(user, temporary_password):
         if not doctor_obj:
             from accounts.models import Doctor
             doctor_obj = Doctor.objects.filter(user=user).first()
-        name = doctor_obj.name if doctor_obj and doctor_obj.name else 'Doctor'
-        greeting = f"Dear Dr. {name},"
+        raw_name = doctor_obj.name if doctor_obj and doctor_obj.name else 'Doctor'
+        clean_name = raw_name.strip()
+        if clean_name.lower().startswith('dr. '):
+            clean_name = clean_name[4:].strip()
+        elif clean_name.lower().startswith('dr '):
+            clean_name = clean_name[3:].strip()
+        greeting = f"Dear Dr. {clean_name},"
         subject = "Your KarunaGrid Doctor Account Has Been Approved"
     elif role == Role.NURSE or str(role).capitalize() == 'Nurse':
         role_title = 'Nurse'
