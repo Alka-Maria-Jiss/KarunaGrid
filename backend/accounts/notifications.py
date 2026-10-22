@@ -15,7 +15,7 @@ def send_via_brevo_api(subject, message, from_email, recipient_list, html_messag
     Sends transactional email via Brevo HTTPS REST API (port 443).
     Bypasses cloud provider SMTP firewall restrictions (e.g. Render, AWS, Heroku free tiers).
     """
-    api_key = getattr(settings, 'BREVO_API_KEY', '') or ''
+    api_key = (getattr(settings, 'BREVO_API_KEY', '') or '').strip().strip('"').strip("'")
     if not api_key:
         return False
 

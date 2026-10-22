@@ -33,8 +33,42 @@ def root_view(request):
         "api_root": "http://localhost:8000/api/"
     })
 
+def test_email_view(request):
+    import requests
+    to_email = request.GET.get('to', 'karunagrid@gmail.com')
+    api_key = (getattr(settings, 'BREVO_API_KEY', '') or '').strip().strip('"').strip("'")
+    sender_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
+    
+    payload = {
+        'sender': {'name': 'KarunaGrid Support', 'email': sender_email},
+        'to': [{'email': to_email}],
+        'subject': 'KarunaGrid Diagnostics Test',
+        'htmlContent': '<p>Diagnostics test from Render.</p>',
+    }
+    headers = {
+        'accept': 'application/json',
+        'api-key': api_key,
+        'content-type': 'application/json',
+    }
+    try:
+        r = requests.post('https://api.brevo.com/v3/smtp/email', json=payload, headers=headers, timeout=10)
+        return JsonResponse({
+            'status_code': r.status_code,
+            'response': r.text,
+            'api_key_len': len(api_key),
+            'api_key_prefix': api_key[:10] if api_key else None,
+            'sender': sender_email,
+            'to': to_email,
+        })
+    except Exception as e:
+        return JsonResponse({
+            'error': str(e),
+            'api_key_len': len(api_key),
+        }, status=500)
+
 urlpatterns = [
     path('', root_view, name='root'),
+    path('api/test-email/', test_email_view, name='test_email'),
     path('admin/', admin.site.urls),
     path('api/', include('accounts.urls')),
     path('api/auth/', include('accounts.urls')),
