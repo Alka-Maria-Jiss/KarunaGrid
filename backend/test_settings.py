@@ -12,6 +12,7 @@ PASSWORD_HASHERS = [
 ]
 
 EMAIL_BACKEND = 'django.core.mail.backends.locmem.EmailBackend'
+BREVO_API_KEY = ''
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

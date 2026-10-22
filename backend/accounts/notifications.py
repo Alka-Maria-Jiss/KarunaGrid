@@ -10,11 +10,82 @@ from accounts.models import Role, RegistrationStatus, VerificationStatus
 logger = logging.getLogger(__name__)
 
 
+def send_via_brevo_api(subject, message, from_email, recipient_list, html_message=None):
+    """
+    Sends transactional email via Brevo HTTPS REST API (port 443).
+    Bypasses cloud provider SMTP firewall restrictions (e.g. Render, AWS, Heroku free tiers).
+    """
+    api_key = getattr(settings, 'BREVO_API_KEY', '') or ''
+    if not api_key:
+        return False
+
+    import requests
+
+    sender_email = from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None) or 'karunagrid@gmail.com'
+    to_list = [{'email': addr.strip()} for addr in recipient_list if addr and addr.strip()]
+    if not to_list:
+        return False
+
+    payload = {
+        'sender': {'name': 'KarunaGrid Support', 'email': sender_email},
+        'to': to_list,
+        'subject': subject,
+    }
+    if html_message:
+        payload['htmlContent'] = html_message
+    if message:
+        payload['textContent'] = message
+
+    headers = {
+        'accept': 'application/json',
+        'api-key': api_key,
+        'content-type': 'application/json',
+    }
+
+    timeout = getattr(settings, 'EMAIL_TIMEOUT', 15)
+    response = requests.post(
+        'https://api.brevo.com/v3/smtp/email',
+        json=payload,
+        headers=headers,
+        timeout=timeout,
+    )
+
+    if response.status_code in (200, 201, 202):
+        logger.info(f"[Email Success] Sent '{subject}' to {recipient_list} via Brevo HTTPS API")
+        return True
+    else:
+        logger.warning(f"[Email Warning] Brevo API error ({response.status_code}): {response.text}")
+        return False
+
+
 def robust_send_mail(subject, message, from_email, recipient_list, html_message=None):
     """
-    Sends email via configured SMTP. If primary fails (e.g. port 587 STARTTLS blocked/throttled on cloud hosts),
-    falls back automatically to direct SSL (port 465) with guaranteed credentials to ensure delivery.
+    Sends email reliably across both local development and hosted cloud environments (e.g. Render).
+    1. In unit tests (locmem backend), sends via Django's standard backend so mail.outbox is populated.
+    2. If BREVO_API_KEY is configured, sends via Brevo HTTPS REST API (port 443, never blocked by cloud firewalls).
+    3. Falls back to Django SMTP (port 587 STARTTLS -> port 465 direct SSL).
     """
+    email_backend = getattr(settings, 'EMAIL_BACKEND', '') or ''
+    if 'locmem' in email_backend:
+        send_mail(
+            subject=subject,
+            message=message,
+            from_email=from_email,
+            recipient_list=recipient_list,
+            html_message=html_message,
+            fail_silently=False,
+        )
+        return True
+
+    # 1. Try Brevo HTTPS REST API (guaranteed to bypass cloud provider SMTP blocks)
+    if getattr(settings, 'BREVO_API_KEY', None):
+        try:
+            if send_via_brevo_api(subject, message, from_email, recipient_list, html_message):
+                return True
+        except Exception as brevo_err:
+            logger.warning(f"[Email Warning] Brevo HTTPS dispatch exception ({brevo_err}). Falling back to SMTP...")
+
+    # 2. Primary SMTP (Port 587 STARTTLS)
     host_user = getattr(settings, 'EMAIL_HOST_USER', None) or 'karunagrid@gmail.com'
     host_password = getattr(settings, 'EMAIL_HOST_PASSWORD', None) or 'wvzbtqenefwpqvtq'
     from_email = from_email or getattr(settings, 'DEFAULT_FROM_EMAIL', None) or host_user
@@ -57,7 +128,7 @@ def robust_send_mail(subject, message, from_email, recipient_list, html_message=
             logger.info(f"[Email Success] Sent '{subject}' to {recipient_list} via SSL port 465 fallback")
             return True
         except Exception as fallback_err:
-            logger.error(f"[Email Error] All SMTP delivery methods failed for {recipient_list}: {fallback_err}", exc_info=True)
+            logger.error(f"[Email Error] All email delivery methods failed for {recipient_list}: {fallback_err}", exc_info=True)
             raise fallback_err
 
 
@@ -115,8 +186,11 @@ def send_staff_approval_email(user, temporary_password):
         if not nurse_obj:
             from accounts.models import Nurse
             nurse_obj = Nurse.objects.filter(user=user).first()
-        name = nurse_obj.name if nurse_obj and nurse_obj.name else 'Nurse'
-        greeting = f"Dear Nurse {name},"
+        raw_name = nurse_obj.name if nurse_obj and nurse_obj.name else 'Nurse'
+        clean_name = raw_name.strip()
+        if clean_name.lower().startswith('nurse '):
+            clean_name = clean_name[6:].strip()
+        greeting = f"Dear Nurse {clean_name},"
         subject = "Your KarunaGrid Nurse Account Has Been Approved"
     else:
         role_title = str(role).title() if role else 'Staff'
@@ -200,9 +274,7 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
 </body>
 </html>"""
 
-    print(f"\n==================================================", flush=True)
-    print(f"[KARUNAGRID APPROVAL EMAIL] To: {user.email} | Role: {role_title} | Temp Password: {temporary_password}", flush=True)
-    print(f"==================================================\n", flush=True)
+    logger.info(f"[KARUNAGRID APPROVAL EMAIL] To: {user.email} | Role: {role_title} | Temp Password: {temporary_password}")
 
     from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
     robust_send_mail(
@@ -216,22 +288,10 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
 
 def send_staff_approval_email_async(user, temporary_password):
     """
-    Spawns a background thread to send the staff approval email asynchronously,
-    preventing HTTP request blocking and Gunicorn proxy timeouts in production.
-    In testing/locmem environments, executes synchronously to ensure deterministic test assertions.
+    Sends the staff approval email synchronously to ensure guaranteed SMTP delivery,
+    preventing daemon thread cut-offs, database connection drops, and stdout lock crashes.
     """
-    if getattr(settings, 'EMAIL_BACKEND', None) == 'django.core.mail.backends.locmem.EmailBackend':
-        return send_staff_approval_email(user, temporary_password)
-
-    import threading
-    t = threading.Thread(
-        target=send_staff_approval_email,
-        args=(user, temporary_password),
-        daemon=True,
-        name=f"email-approval-{getattr(user, 'email', 'staff')}"
-    )
-    t.start()
-    return t
+    return send_staff_approval_email(user, temporary_password)
 
 
 def create_status_notification(user, status, role, rejection_reason=None):
@@ -392,22 +452,9 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
 
 def send_caregiver_approval_email_async(user, caregiver_obj=None, nurse_name=None):
     """
-    Spawns a background thread to send the caregiver approval email asynchronously,
-    preventing HTTP request blocking and Gunicorn proxy timeouts in production.
-    In testing/locmem environments, executes synchronously to ensure deterministic test assertions.
+    Sends the caregiver approval email synchronously to ensure guaranteed SMTP delivery.
     """
-    if getattr(settings, 'EMAIL_BACKEND', None) == 'django.core.mail.backends.locmem.EmailBackend':
-        return send_caregiver_approval_email(user, caregiver_obj, nurse_name)
-
-    import threading
-    t = threading.Thread(
-        target=send_caregiver_approval_email,
-        args=(user, caregiver_obj, nurse_name),
-        daemon=True,
-        name=f"email-caregiver-approval-{getattr(user, 'email', 'cg')}"
-    )
-    t.start()
-    return t
+    return send_caregiver_approval_email(user, caregiver_obj, nurse_name)
 
 
 def send_caregiver_rejection_email(user, caregiver_obj=None, rejection_reason="Application did not meet requirements"):
@@ -494,20 +541,7 @@ body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background
 
 def send_caregiver_rejection_email_async(user, caregiver_obj=None, rejection_reason="Application did not meet requirements"):
     """
-    Spawns a background thread to send the caregiver rejection email asynchronously,
-    preventing HTTP request blocking and Gunicorn proxy timeouts in production.
-    In testing/locmem environments, executes synchronously to ensure deterministic test assertions.
+    Sends the caregiver rejection email synchronously to ensure guaranteed SMTP delivery.
     """
-    if getattr(settings, 'EMAIL_BACKEND', None) == 'django.core.mail.backends.locmem.EmailBackend':
-        return send_caregiver_rejection_email(user, caregiver_obj, rejection_reason)
-
-    import threading
-    t = threading.Thread(
-        target=send_caregiver_rejection_email,
-        args=(user, caregiver_obj, rejection_reason),
-        daemon=True,
-        name=f"email-caregiver-rejection-{getattr(user, 'email', 'cg')}"
-    )
-    t.start()
-    return t
+    return send_caregiver_rejection_email(user, caregiver_obj, rejection_reason)
 
