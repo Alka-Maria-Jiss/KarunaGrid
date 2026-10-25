@@ -61,9 +61,12 @@ from .notifications import (
     create_status_notification,
     send_staff_approval_email,
     send_staff_approval_email_async,
+    send_patient_approval_email,
+    send_patient_rejection_email,
     generate_temporary_password,
     robust_send_mail,
 )
+
 
 
 class RegisterView(APIView):
@@ -1250,6 +1253,13 @@ class DoctorApprovePatientView(APIView):
             # 4. Create in-app status notification for the newly created user
             create_status_notification(user, status=RegistrationStatus.APPROVED, role='Patient')
 
+        # 5. Dispatch automated approval confirmation email to patient with Registration ID & login link
+        try:
+            doc_name = doctor_instance.name if doctor_instance else None
+            send_patient_approval_email(user, patient, doctor_name=doc_name)
+        except Exception as mail_err:
+            logger.warning(f"Could not dispatch patient approval email to {user.email}: {mail_err}")
+
         return Response(
             {
                 "message": f"Patient '{patient.name}' registration approved successfully.",
@@ -1305,6 +1315,13 @@ class DoctorRejectPatientView(APIView):
 
             # NO User created, NO Patient created. Old application preserved in DB.
 
+        # Dispatch automated rejection notification email with doctor's clinical review notes
+        try:
+            doc_name = doctor_instance.name if doctor_instance else None
+            send_patient_rejection_email(application, rejection_reason=rejection_reason, doctor_name=doc_name)
+        except Exception as mail_err:
+            logger.warning(f"Could not dispatch patient rejection email to {application.email}: {mail_err}")
+
         return Response(
             {
                 "message": f"Patient '{application.name}' registration rejected.",
@@ -1312,6 +1329,7 @@ class DoctorRejectPatientView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
 
 
 # --- ADMIN CAREGIVER VERIFICATION ENDPOINTS ---

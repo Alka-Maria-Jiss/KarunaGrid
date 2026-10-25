@@ -550,3 +550,263 @@ def send_caregiver_rejection_email_async(user, caregiver_obj=None, rejection_rea
     """
     return send_caregiver_rejection_email(user, caregiver_obj, rejection_reason)
 
+
+def send_patient_approval_email(user, patient_obj=None, doctor_name=None):
+    """
+    Sends an approval confirmation email to an approved Patient with their Registration ID
+    and portal login instructions.
+    """
+    if not user or not user.email:
+        logger.warning("No valid user/email provided for send_patient_approval_email")
+        return False
+
+    patient_name = patient_obj.name if patient_obj and patient_obj.name else "Patient"
+    reg_id = patient_obj.registration_id if patient_obj and patient_obj.registration_id else "Verified on File"
+    
+    if doctor_name:
+        doc_str = str(doctor_name).strip()
+        doc_text = f"by Dr. {doc_str}" if not doc_str.lower().startswith("dr.") else f"by {doc_str}"
+    else:
+        doc_text = "by our Clinical Palliative Medicine Team"
+
+    frontend_base = getattr(settings, 'FRONTEND_URL', None)
+    if not frontend_base:
+        frontend_base = "http://localhost:5173" if getattr(settings, 'DEBUG', False) else "https://karuna-grid.vercel.app"
+    frontend_base = frontend_base.rstrip('/')
+    login_url = f"{frontend_base}/login"
+
+    subject = "KarunaGrid Patient Registration Approved — Welcome to Palliative Care Network"
+
+    text_content = f"""Dear {patient_name},
+
+Congratulations! We are pleased to inform you that your registration application for community palliative care services with KarunaGrid has been clinically reviewed and APPROVED {doc_text}.
+
+Your Patient Profile Details:
+- Patient Name: {patient_name}
+- Permanent Registration ID: {reg_id}
+- Account Username / Email: {user.email}
+- Account Status: Approved & Active
+
+How to Access the Patient Portal:
+1. Visit the KarunaGrid login portal at: {login_url}
+2. Sign in using your registered email ({user.email}) and the password you set during registration.
+3. Access your personalized Patient Dashboard to view your clinical records, request community nursing visits, and coordinate supportive care.
+
+Security Reminder:
+For your safety, passwords are never transmitted in plain text. Please keep your login credentials secure. If you ever forget your password, you can use the 'Forgot Password' link on the login page.
+
+Our multidisciplinary community care team is honored to support you and your family. If you need any immediate assistance, please reach out through the portal.
+
+Warm regards,
+KarunaGrid Clinical & Community Palliative Care Team
+Community Palliative Care Coordination Infrastructure"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fff9ef; margin: 0; padding: 20px; color: #1e1b14; }}
+.card {{ background-color: #ffffff; max-width: 580px; margin: 0 auto; border-radius: 20px; border: 1px solid #e9e2d5; padding: 36px; box-shadow: 0 4px 20px rgba(100, 94, 69, 0.08); }}
+.brand {{ font-size: 24px; font-weight: 900; color: #645e45; margin-bottom: 6px; letter-spacing: -0.5px; }}
+.tagline {{ font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7b776c; margin-bottom: 20px; }}
+.badge {{ display: inline-block; padding: 6px 14px; background-color: #edf3ec; color: #324e32; border-radius: 9999px; font-size: 12px; font-weight: 800; margin-bottom: 20px; border: 1px solid #c8dcc6; }}
+.greeting {{ font-size: 18px; font-weight: 800; color: #1e1b14; margin-bottom: 12px; }}
+.message {{ font-size: 14px; line-height: 1.6; color: #4a473d; margin-bottom: 16px; }}
+.details-box {{ background-color: #fdfbf7; border: 1.5px solid #ebd4cc; border-left: 5px solid #426442; border-radius: 14px; padding: 20px 22px; margin: 24px 0; }}
+.detail-row {{ margin-bottom: 10px; font-size: 13px; }}
+.detail-row:last-child {{ margin-bottom: 0; }}
+.detail-label {{ font-weight: 700; color: #7b776c; display: inline-block; width: 170px; }}
+.detail-value {{ font-weight: 800; color: #1e1b14; }}
+.action-box {{ text-align: center; margin: 28px 0; }}
+.btn {{ display: inline-block; background-color: #426442; color: #ffffff !important; font-weight: 800; font-size: 14px; padding: 14px 32px; border-radius: 12px; text-decoration: none; box-shadow: 0 2px 8px rgba(66, 100, 66, 0.25); }}
+.steps-box {{ background-color: #fdfbf7; border: 1px solid #ebd4cc; border-radius: 14px; padding: 20px; margin: 24px 0; }}
+.step-title {{ font-size: 13px; font-weight: 800; color: #645e45; margin-bottom: 10px; }}
+.step-item {{ font-size: 13px; line-height: 1.6; color: #4a473d; margin-bottom: 8px; }}
+.step-item:last-child {{ margin-bottom: 0; }}
+.security-note {{ background-color: #faf0ec; border-left: 4px solid #ba1a1a; padding: 12px 16px; margin: 24px 0; border-radius: 0 10px 10px 0; font-size: 12px; line-height: 1.5; color: #7f1d1d; }}
+.footer {{ font-size: 12px; color: #7b776c; margin-top: 32px; border-top: 1px solid #f2ece1; padding-top: 20px; line-height: 1.6; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">KarunaGrid</div>
+  <div class="tagline">Community Palliative Care Infrastructure</div>
+  <div class="badge">✓ Registration Approved & Activated</div>
+  <div class="greeting">Dear {escape(patient_name)},</div>
+  <div class="message">
+    Congratulations! We are pleased to confirm that <strong>your registration for community palliative care services with KarunaGrid has been clinically verified and approved</strong> {escape(doc_text)}.
+  </div>
+  <div class="message">
+    Your profile is now active on the KarunaGrid care grid. You are entitled to comprehensive community support including home nursing visits, teleconsultations, equipment loans, and verified caregiver assistance.
+  </div>
+  <div class="details-box">
+    <div class="detail-row">
+      <span class="detail-label">Patient Name:</span>
+      <span class="detail-value">{escape(patient_name)}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Registration ID:</span>
+      <span class="detail-value" style="color: #426442;">{escape(reg_id)}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Registered Email:</span>
+      <span class="detail-value">{escape(user.email)}</span>
+    </div>
+    <div class="detail-row">
+      <span class="detail-label">Account Status:</span>
+      <span class="detail-value" style="color: #426442;">Active & Enrolled</span>
+    </div>
+  </div>
+  <div class="action-box">
+    <a href="{escape(login_url)}" class="btn" target="_blank">Log In to Patient Portal</a>
+  </div>
+  <div class="steps-box">
+    <div class="step-title">What You Can Do Next:</div>
+    <div class="step-item">1. <strong>Sign in</strong> using your registered email and the password you created during registration.</div>
+    <div class="step-item">2. <strong>Explore your Patient Dashboard</strong> to review assigned healthcare staff and schedule home nurse visits.</div>
+    <div class="step-item">3. <strong>Connect with Caregivers</strong> or request specialized medical equipment directly through your portal.</div>
+  </div>
+  <div class="security-note">
+    <strong>Security Notice:</strong> For your privacy, passwords are never sent via plain email. Please keep your login credentials secure. If you ever forget your password, you can reset it via the 'Forgot Password' link on the login page.
+  </div>
+  <div class="footer">
+    If you or your family require assistance or clinical support, please reach out to your local palliative care coordination team.<br><br>
+    Warm regards,<br>
+    <strong>KarunaGrid Clinical & Community Care Team</strong><br>
+    Community Palliative Care Coordination Platform
+  </div>
+</div>
+</body>
+</html>"""
+
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
+    try:
+        robust_send_mail(
+            subject=subject,
+            message=text_content,
+            from_email=from_email,
+            recipient_list=[user.email],
+            html_message=html_content,
+        )
+        logger.info("Patient approval email sent successfully to %s", user.email)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to send patient approval email to %s: %s", user.email, exc)
+        return False
+
+
+def send_patient_rejection_email(application_obj, rejection_reason="Clinical documentation requires review", doctor_name=None):
+    """
+    Sends a polite rejection notification email to a Patient applicant with doctor's clinical review notes
+    and reapplication instructions.
+    """
+    if not application_obj or not application_obj.email:
+        logger.warning("No valid application/email provided for send_patient_rejection_email")
+        return False
+
+    patient_name = application_obj.name or "Patient Applicant"
+    app_id = application_obj.application_id or f"APP-{application_obj.id}"
+    
+    if doctor_name:
+        doc_str = str(doctor_name).strip()
+        doc_text = f"by Dr. {doc_str}" if not doc_str.lower().startswith("dr.") else f"by {doc_str}"
+    else:
+        doc_text = "by our Clinical Medical Review Team"
+
+    frontend_base = getattr(settings, 'FRONTEND_URL', None)
+    if not frontend_base:
+        frontend_base = "http://localhost:5173" if getattr(settings, 'DEBUG', False) else "https://karuna-grid.vercel.app"
+    frontend_base = frontend_base.rstrip('/')
+    register_url = f"{frontend_base}/register"
+
+    subject = "KarunaGrid Patient Registration Status — Clinical Documentation Update"
+
+    text_content = f"""Dear {patient_name},
+
+Thank you for applying to enroll in the KarunaGrid Community Palliative Care Network.
+
+Following clinical review of your submitted registration application and medical referral documents {doc_text}, our clinical medical team is unable to approve your application in its current form.
+
+Application Reference: {app_id}
+Reason for Decision / Documentation Required:
+{rejection_reason}
+
+What You Can Do:
+You are welcome to re-apply at any time with updated or more detailed clinical records (such as an updated hospital discharge summary, referral letter from your attending physician, or laboratory report).
+
+You can submit a new application here:
+{register_url}
+
+If you have questions regarding this review or require guidance on required documentation, please consult your healthcare provider or local community palliative care representative.
+
+Regards,
+KarunaGrid Clinical & Community Care Team
+Community Palliative Care Coordination Infrastructure"""
+
+    html_content = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body {{ font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #fff9ef; margin: 0; padding: 20px; color: #1e1b14; }}
+.card {{ background-color: #ffffff; max-width: 580px; margin: 0 auto; border-radius: 20px; border: 1px solid #e9e2d5; padding: 36px; box-shadow: 0 4px 20px rgba(100, 94, 69, 0.08); }}
+.brand {{ font-size: 24px; font-weight: 900; color: #645e45; margin-bottom: 6px; letter-spacing: -0.5px; }}
+.tagline {{ font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #7b776c; margin-bottom: 20px; }}
+.badge {{ display: inline-block; padding: 6px 14px; background-color: #faf0ec; color: #ba1a1a; border-radius: 9999px; font-size: 12px; font-weight: 800; margin-bottom: 20px; border: 1px solid #ebd4cc; }}
+.greeting {{ font-size: 18px; font-weight: 800; color: #1e1b14; margin-bottom: 12px; }}
+.message {{ font-size: 14px; line-height: 1.6; color: #4a473d; margin-bottom: 16px; }}
+.reason-box {{ background-color: #faf0ec; border-left: 5px solid #ba1a1a; padding: 18px 20px; margin: 24px 0; border-radius: 0 12px 12px 0; font-size: 13px; line-height: 1.6; color: #7f1d1d; }}
+.action-box {{ text-align: center; margin: 28px 0; }}
+.btn {{ display: inline-block; background-color: #645e45; color: #ffffff !important; font-weight: 800; font-size: 14px; padding: 14px 32px; border-radius: 12px; text-decoration: none; box-shadow: 0 2px 8px rgba(100, 94, 69, 0.2); }}
+.footer {{ font-size: 12px; color: #7b776c; margin-top: 32px; border-top: 1px solid #f2ece1; padding-top: 20px; line-height: 1.6; }}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">KarunaGrid</div>
+  <div class="tagline">Community Palliative Care Infrastructure</div>
+  <div class="badge">Registration Review Update</div>
+  <div class="greeting">Dear {escape(patient_name)},</div>
+  <div class="message">
+    Thank you for applying to enroll in the KarunaGrid Community Palliative Care Network.
+  </div>
+  <div class="message">
+    Following clinical documentation review of your application (Reference: <strong>{escape(app_id)}</strong>) {escape(doc_text)}, our clinical medical team is unable to approve enrollment at this time.
+  </div>
+  <div class="reason-box">
+    <strong style="display: block; margin-bottom: 6px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Clinical Review Notes:</strong>
+    {escape(rejection_reason)}
+  </div>
+  <div class="message">
+    You or your family are welcome to submit an updated application with complete clinical records (such as an updated hospital discharge summary, specialist referral note, or investigation reports).
+  </div>
+  <div class="action-box">
+    <a href="{escape(register_url)}" class="btn" target="_blank">Re-apply on KarunaGrid</a>
+  </div>
+  <div class="footer">
+    If you have questions regarding this review, please coordinate with your primary attending physician or local community palliative care coordinator.<br><br>
+    Regards,<br>
+    <strong>KarunaGrid Clinical & Community Care Team</strong><br>
+    Community Palliative Care Coordination Platform
+  </div>
+</div>
+</body>
+</html>"""
+
+    from_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'karunagrid@gmail.com')
+    try:
+        robust_send_mail(
+            subject=subject,
+            message=text_content,
+            from_email=from_email,
+            recipient_list=[application_obj.email],
+            html_message=html_content,
+        )
+        logger.info("Patient rejection email sent successfully to %s", application_obj.email)
+        return True
+    except Exception as exc:
+        logger.warning("Failed to send patient rejection email to %s: %s", application_obj.email, exc)
+        return False
+
+
