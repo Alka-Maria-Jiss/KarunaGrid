@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { API_ROOT } from '../../api/config';
+import { getSecureDocumentUrl, openSecureDocument } from '../../utils/documentUtils';
 import {
   ArrowLeft,
   FileText,
@@ -621,9 +622,10 @@ export default function DoctorPatientWorkspace({
             )}
             {patient.discharge_summary_path && (
               <a
-                href={`${API_ROOT}/auth/documents/view/?type=discharge_summary&id=${patient.patient_id}`}
+                href={getSecureDocumentUrl('discharge_summary', patient.patient_id)}
                 target="_blank"
                 rel="noreferrer"
+                onClick={(e) => { e.preventDefault(); openSecureDocument('discharge_summary', patient.patient_id); }}
                 className="inline-flex items-center gap-1 text-[11px] font-extrabold text-[#645e45] hover:underline"
               >
                 <FileText className="w-3 h-3" />
@@ -1001,9 +1003,10 @@ export default function DoctorPatientWorkspace({
                   </div>
                   {application.discharge_summary_path ? (
                     <a
-                      href={`${API_ROOT}/auth/documents/view/?type=patient_discharge_summary&id=${application.id}`}
+                      href={getSecureDocumentUrl('patient_discharge_summary', application.id)}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={(e) => { e.preventDefault(); openSecureDocument('patient_discharge_summary', application.id); }}
                       className="px-3 py-1.5 rounded-xl bg-[#645e45] text-white text-xs font-bold hover:bg-[#4d4835] transition-colors inline-flex items-center gap-1.5 shadow-2xs"
                     >
                       <Download className="w-3.5 h-3.5" />
@@ -1142,9 +1145,10 @@ export default function DoctorPatientWorkspace({
                       <td className="py-3.5 px-3 text-right">
                         <div className="inline-flex items-center gap-1.5">
                           <a
-                            href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${lr.report_id}`}
+                            href={getSecureDocumentUrl('lab_report', lr.report_id)}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={(e) => { e.preventDefault(); openSecureDocument('lab_report', lr.report_id); }}
                             className="px-2.5 py-1.5 rounded-xl bg-[#fdfbf7] text-[#645e45] border border-[#e9e2d5] text-[11px] font-bold hover:bg-[#f4ede0] inline-flex items-center gap-1 shadow-2xs"
                           >
                             <Eye className="w-3 h-3" />
@@ -1963,9 +1967,10 @@ export default function DoctorPatientWorkspace({
               <div className="pt-2 border-t border-[#f0eae0] flex justify-between items-center">
                 <span className="text-[11px] text-[#7b776c]">Uploaded On: {selectedLabReport.uploaded_at}</span>
                 <a
-                  href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${selectedLabReport.report_id}`}
+                  href={getSecureDocumentUrl('lab_report', selectedLabReport.report_id)}
                   target="_blank"
                   rel="noreferrer"
+                  onClick={(e) => { e.preventDefault(); openSecureDocument('lab_report', selectedLabReport.report_id); }}
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#645e45] text-white font-extrabold text-xs hover:bg-[#4d4835] transition-colors shadow-2xs"
                 >
                   <Eye className="w-3.5 h-3.5" />

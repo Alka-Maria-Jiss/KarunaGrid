@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileSpreadsheet, FileText, CheckCircle2, AlertCircle, RefreshCw, X, ExternalLink, Eye, Check } from 'lucide-react';
 import { API_ROOT } from '../../api/config';
+import { getSecureDocumentUrl, openSecureDocument } from '../../utils/documentUtils';
 
 export default function DoctorLaboratoryReports() {
   const [reports, setReports] = useState([]);
@@ -176,9 +177,10 @@ export default function DoctorLaboratoryReports() {
                     <td className="py-3.5 px-4 text-right">
                       <div className="inline-flex items-center gap-1.5">
                         <a
-                          href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${lr.report_id}`}
+                          href={getSecureDocumentUrl('lab_report', lr.report_id)}
                           target="_blank"
                           rel="noreferrer"
+                          onClick={(e) => { e.preventDefault(); openSecureDocument('lab_report', lr.report_id); }}
                           className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-[#fdfbf7] border border-[#e9e2d5] text-[#4a473d] hover:bg-[#f4ede0] inline-flex items-center gap-1 cursor-pointer"
                         >
                           <Eye className="w-3 h-3" />
@@ -249,9 +251,10 @@ export default function DoctorLaboratoryReports() {
                 <div className="pt-2 border-t border-[#f0eae0] flex justify-between items-center">
                   <span className="text-[11px] text-[#7b776c]">Uploaded On: {selectedReport.uploaded_at}</span>
                   <a
-                    href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${selectedReport.report_id}`}
+                    href={getSecureDocumentUrl('lab_report', selectedReport.report_id)}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => { e.preventDefault(); openSecureDocument('lab_report', selectedReport.report_id); }}
                     className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#645e45] text-white font-extrabold text-xs hover:bg-[#4d4835] transition-colors shadow-2xs"
                   >
                     <Eye className="w-3.5 h-3.5" />

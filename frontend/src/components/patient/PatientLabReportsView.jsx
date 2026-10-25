@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { API_ROOT } from '../../api/config';
+import { getSecureDocumentUrl, openSecureDocument } from '../../utils/documentUtils';
 import {
   FileSpreadsheet,
   Search,
@@ -301,9 +302,10 @@ export default function PatientLabReportsView({
                 {/* View Document Action */}
                 <div className="pt-3 border-t border-[#f2ece1] flex justify-end">
                   <a
-                    href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${report.report_id}`}
+                    href={getSecureDocumentUrl('lab_report', report.report_id)}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => { e.preventDefault(); openSecureDocument('lab_report', report.report_id); }}
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#645e45] bg-[#f4ede0] hover:bg-[#645e45] hover:text-white rounded-xl transition-all shadow-2xs"
                   >
                     <Eye className="w-3.5 h-3.5" />

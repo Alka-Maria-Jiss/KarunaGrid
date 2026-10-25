@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { X, FileText, CheckCircle2, XCircle, AlertTriangle, ExternalLink, Download } from 'lucide-react';
+import { getSecureDocumentUrl, openSecureDocument } from '../../utils/documentUtils';
 
 export default function DoctorRegistrationDetailModal({
   patient,
@@ -11,6 +12,7 @@ export default function DoctorRegistrationDetailModal({
   const [showRejectInput, setShowRejectInput] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
   const [error, setError] = useState('');
+  const [isOpeningDoc, setIsOpeningDoc] = useState(false);
 
   if (!patient) return null;
 
@@ -28,13 +30,28 @@ export default function DoctorRegistrationDetailModal({
     if (onReject) onReject(patient.patient_id, rejectionReason.trim());
   };
 
-  const docUrl = patient.discharge_summary_url
-    ? patient.discharge_summary_url
-    : (patient.discharge_summary_path
-        ? (patient.discharge_summary_path.startsWith('http') || patient.discharge_summary_path.startsWith('/media/')
-            ? patient.discharge_summary_path
-            : `/media/${patient.discharge_summary_path}`)
-        : null);
+  const docId = patient.id || patient.patient_id || patient.registration_id;
+  const secureDocUrl = getSecureDocumentUrl(
+    'patient_discharge_summary',
+    docId,
+    patient.discharge_summary_url || patient.discharge_summary_path
+  );
+
+  const handleOpenDischargeSummary = async (e) => {
+    if (e) e.preventDefault();
+    setIsOpeningDoc(true);
+    try {
+      await openSecureDocument(
+        'patient_discharge_summary',
+        docId,
+        patient.discharge_summary_url || patient.discharge_summary_path
+      );
+    } catch (err) {
+      console.error('Failed to open discharge summary:', err);
+    } finally {
+      setIsOpeningDoc(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">
@@ -118,12 +135,13 @@ export default function DoctorRegistrationDetailModal({
                   <p className="text-[10px] text-[#7b776c]">Hospital referral / clinical discharge record</p>
                 </div>
                 <a
-                  href={docUrl}
+                  href={secureDocUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#645e45] text-white text-xs font-bold hover:bg-[#4c472f] transition-all shadow-2xs cursor-pointer flex-shrink-0"
+                  onClick={handleOpenDischargeSummary}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#645e45] text-white text-xs font-bold hover:bg-[#4c472f] transition-all shadow-2xs cursor-pointer flex-shrink-0 disabled:opacity-60"
                 >
-                  <span>View Document</span>
+                  <span>{isOpeningDoc ? 'Opening...' : 'View Document'}</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               </div>

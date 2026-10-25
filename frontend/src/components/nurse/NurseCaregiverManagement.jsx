@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import { getSecureDocumentUrl, openSecureDocument } from '../../utils/documentUtils';
 
 export default function NurseCaregiverManagement() {
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'approved' | 'assignments' | 'complaints'
@@ -411,9 +412,10 @@ export default function NurseCaregiverManagement() {
 
                     {cg.identity_proof_path && (
                       <a
-                        href={`/api/auth/documents/view/?type=caregiver_identity_proof&id=${cg.caregiver_id}`}
+                        href={getSecureDocumentUrl('caregiver_identity_proof', cg.caregiver_id)}
                         target="_blank"
                         rel="noreferrer"
+                        onClick={(e) => { e.preventDefault(); openSecureDocument('caregiver_identity_proof', cg.caregiver_id); }}
                         className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#645e45] hover:underline bg-[#f8f3eb] px-2.5 py-1.5 rounded-lg border border-[#e8dccb]"
                       >
                         <FileText className="w-3.5 h-3.5" />
@@ -736,9 +738,10 @@ export default function NurseCaregiverManagement() {
               {selectedCaregiverModal.identity_proof_path && (
                 <div className="pt-2">
                   <a
-                    href={`/api/auth/documents/view/?type=caregiver_identity_proof&id=${selectedCaregiverModal.caregiver_id}`}
+                    href={getSecureDocumentUrl('caregiver_identity_proof', selectedCaregiverModal.caregiver_id)}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => { e.preventDefault(); openSecureDocument('caregiver_identity_proof', selectedCaregiverModal.caregiver_id); }}
                     className="inline-flex items-center gap-1.5 text-xs font-bold text-[#645e45] hover:underline bg-[#f8f3eb] px-3 py-2 rounded-xl border border-[#e8dccb] w-full justify-center"
                   >
                     <FileText className="w-4 h-4" />

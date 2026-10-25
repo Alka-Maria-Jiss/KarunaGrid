@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
+import { getSecureDocumentUrl, openSecureDocument } from '../utils/documentUtils';
 
 export default function CaregiverDashboard({ user, onLogout }) {
   const status = (user?.status || user?.details?.verification_status || 'PENDING').toUpperCase();
@@ -694,9 +695,10 @@ export default function CaregiverDashboard({ user, onLogout }) {
                 <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-[#7b776c]">Verification Proof</h4>
                 {details.identity_proof_path && (
                   <a
-                    href={`/api/auth/documents/view/?type=caregiver_identity_proof&id=${details.caregiver_id}`}
+                    href={getSecureDocumentUrl('caregiver_identity_proof', details.caregiver_id)}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => { e.preventDefault(); openSecureDocument('caregiver_identity_proof', details.caregiver_id); }}
                     className="inline-flex items-center gap-2 text-xs font-bold text-[#645e45] hover:underline bg-[#f8f3eb] px-3 py-2.5 rounded-xl border border-[#e8dccb]"
                   >
                     <FileText className="w-4 h-4" />

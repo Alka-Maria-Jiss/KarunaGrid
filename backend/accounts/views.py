@@ -722,16 +722,30 @@ class SecureDocumentView(APIView):
         file_path = None
         has_access = False
 
-        if doc_type == 'patient_discharge_summary':
-            # Check PatientRegistrationApplication first, then Patient
-            app = PatientRegistrationApplication.objects.filter(id=doc_id).first()
+        if doc_type in ['patient_discharge_summary', 'discharge_summary']:
+            # Check PatientRegistrationApplication first by id or application_id
+            app = (
+                PatientRegistrationApplication.objects.filter(id=doc_id).first()
+                if str(doc_id).isdigit()
+                else None
+            )
+            if not app:
+                app = PatientRegistrationApplication.objects.filter(application_id__iexact=str(doc_id)).first()
+
             if app:
                 file_path = app.discharge_summary_path
                 # Check authorization: Doctor or Admin
                 if user.role in [Role.ADMIN, Role.DOCTOR]:
                     has_access = True
             else:
-                patient = Patient.objects.filter(patient_id=doc_id).first()
+                patient = (
+                    Patient.objects.filter(patient_id=doc_id).first()
+                    if str(doc_id).isdigit()
+                    else None
+                )
+                if not patient:
+                    patient = Patient.objects.filter(registration_id__iexact=str(doc_id)).first()
+
                 if not patient:
                     return Response({"detail": "Document not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -745,7 +759,11 @@ class SecureDocumentView(APIView):
                     has_access = True
 
         elif doc_type == 'caregiver_identity_proof':
-            caregiver = Caregiver.objects.filter(caregiver_id=doc_id).first()
+            caregiver = (
+                Caregiver.objects.filter(caregiver_id=doc_id).first()
+                if str(doc_id).isdigit()
+                else None
+            )
             if not caregiver:
                 return Response({"detail": "Document not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -758,7 +776,11 @@ class SecureDocumentView(APIView):
 
         elif doc_type == 'lab_report':
             from medical_records.models import LabReport
-            lab_report = LabReport.objects.filter(report_id=doc_id).first()
+            lab_report = (
+                LabReport.objects.filter(report_id=doc_id).first()
+                if str(doc_id).isdigit()
+                else None
+            )
             if not lab_report:
                 return Response({"detail": "Laboratory report document not found."}, status=status.HTTP_404_NOT_FOUND)
 
@@ -784,14 +806,29 @@ class SecureDocumentView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        if not file_path or not default_storage.exists(file_path):
+        if not file_path:
             return Response(
                 {"detail": "Document file is missing or not found on storage."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        file_stream = default_storage.open(file_path, 'rb')
-        content_type, _ = mimetypes.guess_type(file_path)
+        # Normalize file_path to be relative to storage root without leading slash or media/
+        clean_file_path = file_path.replace('\\', '/')
+        if clean_file_path.startswith('/media/'):
+            clean_file_path = clean_file_path[7:]
+        elif clean_file_path.startswith('media/'):
+            clean_file_path = clean_file_path[6:]
+        elif clean_file_path.startswith('/'):
+            clean_file_path = clean_file_path[1:]
+
+        if not default_storage.exists(clean_file_path):
+            return Response(
+                {"detail": "Document file is missing or not found on storage."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        file_stream = default_storage.open(clean_file_path, 'rb')
+        content_type, _ = mimetypes.guess_type(clean_file_path)
         if not content_type:
             content_type = 'application/octet-stream'
 
