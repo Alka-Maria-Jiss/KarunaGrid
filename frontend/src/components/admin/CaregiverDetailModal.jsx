@@ -1,6 +1,7 @@
 import React from 'react';
 import { FileText, CheckCircle2, XCircle, X, ShieldCheck, Phone, MapPin, Award } from 'lucide-react';
 import { useToast } from '../../context/ToastContext';
+import { API_BASE_URL } from '../../api/config';
 
 export default function CaregiverDetailModal({
   caregiver,
@@ -17,7 +18,7 @@ export default function CaregiverDetailModal({
       const token = localStorage.getItem('access_token');
       let fullUrl = docUrl.startsWith('http')
         ? docUrl
-        : `http://127.0.0.1:8000${docUrl.startsWith('/') ? '' : '/'}${docUrl}`;
+        : `${API_BASE_URL}${docUrl.startsWith('/') ? '' : '/'}${docUrl}`;
 
       if (token && !fullUrl.includes('token=')) {
         fullUrl += `${fullUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;

@@ -137,7 +137,12 @@ export default function AdminDashboard({ user, onLogout }) {
   // Extract filtered lists for Doctors, Nurses, and Caregivers
   const safeUsers = Array.isArray(users) ? users : [];
   const doctorsList = safeUsers.filter((u) => u.role?.toLowerCase() === 'doctor');
-  const nursesList = safeUsers.filter((u) => u.role?.toLowerCase() === 'nurse');
+  const nursesList = safeUsers
+    .filter((u) => u.role?.toLowerCase() === 'nurse')
+    .map((u) => ({
+      ...u,
+      name: u.name ? u.name.replace(/^nurse\s+/i, '').trim() : u.name,
+    }));
   const caregiversList = safeUsers.filter((u) => u.role?.toLowerCase() === 'caregiver');
 
   const safePendingCaregivers = Array.isArray(pendingCaregivers) ? pendingCaregivers : [];

@@ -24,6 +24,7 @@ import NurseProfileView from '../components/nurse/NurseProfileView';
 import NurseReviewRequestModal from '../components/nurse/NurseReviewRequestModal';
 import NurseCompleteVisitModal from '../components/nurse/NurseCompleteVisitModal';
 import NurseVisitSummaryModal from '../components/nurse/NurseVisitSummaryModal';
+import { API_ROOT } from '../api/config';
 
 export default function NurseDashboard({ user, onLogout }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -47,7 +48,7 @@ export default function NurseDashboard({ user, onLogout }) {
   const fetchAvailableAllocationsCount = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/nurse/home-visits/?tab=available', {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/home-visits/?tab=available`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -68,7 +69,7 @@ export default function NurseDashboard({ user, onLogout }) {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/nurse/dashboard/', {
+      const res = await fetch(`${API_ROOT}/nurse/dashboard/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ export default function NurseDashboard({ user, onLogout }) {
     setIsTogglingAvailability(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/nurse/availability/', {
+      const res = await fetch(`${API_ROOT}/nurse/availability/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -140,10 +141,11 @@ export default function NurseDashboard({ user, onLogout }) {
     setSummaryVisit(visit);
   };
 
-  const nurseInfo = dashboardData?.nurse_info || user?.details || {
-    name: user?.name || 'Nurse',
-    nurse_id: user?.details?.nurse_id || '---',
-    is_available_now: true,
+  const nurseInfo = {
+    ...(currentUser || user),
+    ...(currentUser || user)?.details,
+    ...dashboardData?.nurse_info,
+    name: (currentUser || user)?.name || dashboardData?.nurse_info?.name || (currentUser || user)?.details?.name || 'Nurse',
   };
 
   const unreadCount = dashboardData?.summary_cards?.unread_notifications || 0;
@@ -167,7 +169,7 @@ export default function NurseDashboard({ user, onLogout }) {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         <NurseHeader
-          nurse={dashboardData?.nurse_info || nurseInfo}
+          nurse={nurseInfo}
           unreadCount={unreadCount}
           onToggleAvailability={handleToggleAvailability}
           isTogglingAvailability={isTogglingAvailability}

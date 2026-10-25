@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart3, Video, Home, Pill, FileSpreadsheet, RefreshCw, Download, FileText, CheckCircle2 } from 'lucide-react';
+import { API_ROOT } from '../../api/config';
 
 export default function DoctorReports() {
   const [stats, setStats] = useState(null);
@@ -9,7 +10,7 @@ export default function DoctorReports() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/doctor/reports/', {
+      const res = await fetch(`${API_ROOT}/doctor/reports/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

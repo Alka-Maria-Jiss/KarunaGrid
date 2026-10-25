@@ -206,11 +206,15 @@ export default function NurseProfileView({
       setIsEditing(false);
 
       if (onUpdateUser) {
-        onUpdateUser({
+        const freshUser = {
           ...user,
           name: updatedProfile.name,
           email: updatedProfile.email,
-        });
+        };
+        try {
+          localStorage.setItem('user_info', JSON.stringify(freshUser));
+        } catch (e) {}
+        onUpdateUser(freshUser);
       }
       if (onRefresh) onRefresh();
     } catch (err) {

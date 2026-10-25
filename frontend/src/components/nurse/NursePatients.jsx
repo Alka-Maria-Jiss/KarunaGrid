@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   Users,
   Search,
@@ -27,7 +28,7 @@ export default function NursePatients({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/nurse/patients/?search=${encodeURIComponent(searchQuery)}&status=${statusFilter}`, {
+      const res = await fetch(`${API_ROOT}/nurse/patients/?search=${encodeURIComponent(searchQuery)}&status=${statusFilter}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   FileSpreadsheet,
   Search,
@@ -100,7 +101,7 @@ export default function PatientLabReportsView({
       formData.append('report_date', reportDate);
       formData.append('file', selectedFile);
 
-      const res = await fetch('http://127.0.0.1:8000/api/auth/patient/lab-reports/', {
+      const res = await fetch(`${API_ROOT}/auth/patient/lab-reports/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -300,7 +301,7 @@ export default function PatientLabReportsView({
                 {/* View Document Action */}
                 <div className="pt-3 border-t border-[#f2ece1] flex justify-end">
                   <a
-                    href={`http://127.0.0.1:8000/api/auth/documents/view/?type=lab_report&id=${report.report_id}`}
+                    href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${report.report_id}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold text-[#645e45] bg-[#f4ede0] hover:bg-[#645e45] hover:text-white rounded-xl transition-all shadow-2xs"

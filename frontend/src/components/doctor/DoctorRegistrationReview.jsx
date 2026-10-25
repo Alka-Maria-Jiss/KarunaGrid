@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, Search, Filter, FileText, ArrowRight, CheckCircle2, XCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import apiClient from '../../api/apiClient';
 import DoctorRegistrationDetailModal from './DoctorRegistrationDetailModal';
 
 export default function DoctorRegistrationReview({
@@ -15,19 +16,11 @@ export default function DoctorRegistrationReview({
   const fetchPendingPatients = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/doctor/patients/pending/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRegistrations(Array.isArray(data) ? data : []);
-      }
+      const data = await apiClient.get('/doctor/patients/pending/');
+      setRegistrations(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error('Error fetching pending patients:', err);
+      setMessage({ text: err.message || 'Failed to load pending registrations.', type: 'error' });
     } finally {
       setIsLoading(false);
     }
@@ -41,25 +34,13 @@ export default function DoctorRegistrationReview({
     setIsProcessing(true);
     setMessage({ text: '', type: '' });
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/approve/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage({ text: data.message || 'Patient registration approved successfully.', type: 'success' });
-        setSelectedPatient(null);
-        fetchPendingPatients();
-        if (onRefreshStats) onRefreshStats();
-      } else {
-        setMessage({ text: data.detail || 'Failed to approve patient registration.', type: 'error' });
-      }
+      const data = await apiClient.post(`/doctor/patients/${patientId}/approve/`);
+      setMessage({ text: data.message || 'Patient registration approved successfully.', type: 'success' });
+      setSelectedPatient(null);
+      await fetchPendingPatients();
+      if (onRefreshStats) onRefreshStats();
     } catch (err) {
-      setMessage({ text: 'Network error occurred.', type: 'error' });
+      setMessage({ text: err.data?.detail || err.message || 'Failed to approve patient registration.', type: 'error' });
     } finally {
       setIsProcessing(false);
     }
@@ -69,27 +50,14 @@ export default function DoctorRegistrationReview({
     setIsProcessing(true);
     setMessage({ text: '', type: '' });
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/reject/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ rejection_reason: reason }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setMessage({ text: data.message || 'Patient registration rejected.', type: 'success' });
-        setSelectedPatient(null);
-        fetchPendingPatients();
-        if (onRefreshStats) onRefreshStats();
-      } else {
-        const errorMsg = data.errors?.rejection_reason?.[0] || data.detail || 'Failed to reject registration.';
-        setMessage({ text: errorMsg, type: 'error' });
-      }
+      const data = await apiClient.post(`/doctor/patients/${patientId}/reject/`, { rejection_reason: reason });
+      setMessage({ text: data.message || 'Patient registration rejected.', type: 'success' });
+      setSelectedPatient(null);
+      await fetchPendingPatients();
+      if (onRefreshStats) onRefreshStats();
     } catch (err) {
-      setMessage({ text: 'Network error occurred.', type: 'error' });
+      const errorMsg = err.data?.errors?.rejection_reason?.[0] || err.data?.detail || err.message || 'Failed to reject registration.';
+      setMessage({ text: errorMsg, type: 'error' });
     } finally {
       setIsProcessing(false);
     }

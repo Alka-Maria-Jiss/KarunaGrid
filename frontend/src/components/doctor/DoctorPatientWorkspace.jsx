@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   ArrowLeft,
   FileText,
@@ -101,7 +102,7 @@ export default function DoctorPatientWorkspace({
 
     try {
       // 1. Fetch Full Clinical Profile
-      const profRes = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/profile/`, { headers });
+      const profRes = await fetch(`${API_ROOT}/doctor/patients/${patientId}/profile/`, { headers });
       if (profRes.ok) {
         const pData = await profRes.json();
         setProfileData(pData);
@@ -114,28 +115,28 @@ export default function DoctorPatientWorkspace({
       }
 
       // 2. Fetch Timeline
-      const timeRes = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/timeline/`, { headers });
+      const timeRes = await fetch(`${API_ROOT}/doctor/patients/${patientId}/timeline/`, { headers });
       if (timeRes.ok) {
         const tData = await timeRes.json();
         setTimelineEvents(Array.isArray(tData) ? tData : []);
       }
 
       // 3. Fetch Standalone Prescriptions
-      const rxRes = await fetch(`http://127.0.0.1:8000/api/medical-records/doctor/prescriptions/?patient_id=${patientId}`, { headers });
+      const rxRes = await fetch(`${API_ROOT}/medical-records/doctor/prescriptions/?patient_id=${patientId}`, { headers });
       if (rxRes.ok) {
         const rxData = await rxRes.json();
         setPrescriptions(Array.isArray(rxData) ? rxData : []);
       }
 
       // 4. Fetch Standalone Nutrition Plans
-      const nutRes = await fetch(`http://127.0.0.1:8000/api/medical-records/doctor/nutrition/?patient_id=${patientId}`, { headers });
+      const nutRes = await fetch(`${API_ROOT}/medical-records/doctor/nutrition/?patient_id=${patientId}`, { headers });
       if (nutRes.ok) {
         const nutData = await nutRes.json();
         setNutritionPlans(Array.isArray(nutData) ? nutData : []);
       }
 
       // 5. Fetch Standalone Lab Reports
-      const labRes = await fetch(`http://127.0.0.1:8000/api/medical-records/doctor/lab-reports/?patient_id=${patientId}`, { headers });
+      const labRes = await fetch(`${API_ROOT}/medical-records/doctor/lab-reports/?patient_id=${patientId}`, { headers });
       if (labRes.ok) {
         const labData = await labRes.json();
         setLabReports(Array.isArray(labData) ? labData : []);
@@ -166,7 +167,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/medical-records/doctor/patients/${patientId}/diagnoses/`, {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/patients/${patientId}/diagnoses/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -200,7 +201,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/medical-records/doctor/patients/${patientId}/allergies/`, {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/patients/${patientId}/allergies/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -234,7 +235,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/medical-records/doctor/patients/${patientId}/chronic-conditions/`, {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/patients/${patientId}/chronic-conditions/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -312,7 +313,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/medical-records/doctor/prescriptions/', {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/prescriptions/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -360,7 +361,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/medical-records/doctor/nutrition/', {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/nutrition/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -400,7 +401,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/medical-records/doctor/lab-reports/${selectedLabReport.report_id}/review/`, {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/lab-reports/${selectedLabReport.report_id}/review/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -431,7 +432,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${appId}/approve/`, {
+      const res = await fetch(`${API_ROOT}/doctor/patients/${appId}/approve/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -462,7 +463,7 @@ export default function DoctorPatientWorkspace({
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${appObj.id}/reject/`, {
+      const res = await fetch(`${API_ROOT}/doctor/patients/${appObj.id}/reject/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -620,7 +621,7 @@ export default function DoctorPatientWorkspace({
             )}
             {patient.discharge_summary_path && (
               <a
-                href={`http://127.0.0.1:8000/api/auth/documents/view/?type=discharge_summary&id=${patient.patient_id}`}
+                href={`${API_ROOT}/auth/documents/view/?type=discharge_summary&id=${patient.patient_id}`}
                 target="_blank"
                 rel="noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] font-extrabold text-[#645e45] hover:underline"
@@ -1000,7 +1001,7 @@ export default function DoctorPatientWorkspace({
                   </div>
                   {application.discharge_summary_path ? (
                     <a
-                      href={`http://127.0.0.1:8000/api/auth/documents/view/?type=patient_discharge_summary&id=${application.id}`}
+                      href={`${API_ROOT}/auth/documents/view/?type=patient_discharge_summary&id=${application.id}`}
                       target="_blank"
                       rel="noreferrer"
                       className="px-3 py-1.5 rounded-xl bg-[#645e45] text-white text-xs font-bold hover:bg-[#4d4835] transition-colors inline-flex items-center gap-1.5 shadow-2xs"
@@ -1141,7 +1142,7 @@ export default function DoctorPatientWorkspace({
                       <td className="py-3.5 px-3 text-right">
                         <div className="inline-flex items-center gap-1.5">
                           <a
-                            href={`http://127.0.0.1:8000/api/auth/documents/view/?type=lab_report&id=${lr.report_id}`}
+                            href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${lr.report_id}`}
                             target="_blank"
                             rel="noreferrer"
                             className="px-2.5 py-1.5 rounded-xl bg-[#fdfbf7] text-[#645e45] border border-[#e9e2d5] text-[11px] font-bold hover:bg-[#f4ede0] inline-flex items-center gap-1 shadow-2xs"
@@ -1962,7 +1963,7 @@ export default function DoctorPatientWorkspace({
               <div className="pt-2 border-t border-[#f0eae0] flex justify-between items-center">
                 <span className="text-[11px] text-[#7b776c]">Uploaded On: {selectedLabReport.uploaded_at}</span>
                 <a
-                  href={`http://127.0.0.1:8000/api/auth/documents/view/?type=lab_report&id=${selectedLabReport.report_id}`}
+                  href={`${API_ROOT}/auth/documents/view/?type=lab_report&id=${selectedLabReport.report_id}`}
                   target="_blank"
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-[#645e45] text-white font-extrabold text-xs hover:bg-[#4d4835] transition-colors shadow-2xs"

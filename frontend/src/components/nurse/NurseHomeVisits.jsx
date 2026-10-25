@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   Home,
   Calendar,
@@ -137,7 +138,7 @@ export default function NurseHomeVisits({
     try {
       const token = localStorage.getItem('access_token');
       const dateParam = targetDate || selectedDate;
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/nurse/home-visits/?date=${dateParam}`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/home-visits/?date=${dateParam}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -161,7 +162,7 @@ export default function NurseHomeVisits({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/home-visits/schedules/', {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/schedules/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -182,7 +183,7 @@ export default function NurseHomeVisits({
   const fetchDoctors = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/home-visits/available-doctors/', {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/available-doctors/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -201,7 +202,7 @@ export default function NurseHomeVisits({
   const fetchApprovedPatients = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/nurse/patients/', {
+      const res = await fetch(`${API_ROOT}/nurse/patients/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -225,7 +226,7 @@ export default function NurseHomeVisits({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/nurse/home-visits/?tab=completed', {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/home-visits/?tab=completed`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -373,7 +374,7 @@ export default function NurseHomeVisits({
     setFeedbackMsg({ text: '', type: '' });
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/home-visits/occurrences/${assignDoctorModal.occurrence_id}/assign-doctor/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/occurrences/${assignDoctorModal.occurrence_id}/assign-doctor/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -428,7 +429,7 @@ export default function NurseHomeVisits({
     setFeedbackMsg({ text: '', type: '' });
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/home-visits/schedules/', {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/schedules/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -470,7 +471,7 @@ export default function NurseHomeVisits({
     setFeedbackMsg({ text: '', type: '' });
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/home-visits/schedules/${editScheduleModal.schedule_id}/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/schedules/${editScheduleModal.schedule_id}/`, {
         method: 'PATCH',
         headers: {
           'Authorization': `Bearer ${token}`,

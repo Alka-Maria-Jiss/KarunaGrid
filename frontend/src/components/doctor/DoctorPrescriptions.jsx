@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Pill, Plus, Trash2, CheckCircle2, AlertCircle, RefreshCw, X, User, ArrowRight } from 'lucide-react';
+import { API_ROOT } from '../../api/config';
 
 export default function DoctorPrescriptions({
   initialPatientId = null,
@@ -19,7 +20,7 @@ export default function DoctorPrescriptions({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/medical-records/doctor/prescriptions/', {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/prescriptions/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -39,7 +40,7 @@ export default function DoctorPrescriptions({
   const fetchPatients = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/doctor/patients/?status=Approved', {
+      const res = await fetch(`${API_ROOT}/doctor/patients/?status=Approved`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ export default function DoctorPrescriptions({
     setMessage({ text: '', type: '' });
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/medical-records/doctor/prescriptions/', {
+      const res = await fetch(`${API_ROOT}/medical-records/doctor/prescriptions/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

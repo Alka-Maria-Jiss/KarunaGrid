@@ -9,6 +9,7 @@ import {
   ChevronDown
 } from 'lucide-react';
 import NotificationDropdown from '../NotificationDropdown';
+import { getUserFullName, getAvatarInitials, getRoleDisplayLabel } from '../../utils/userProfileUtils';
 
 export default function NurseHeader({
   nurse,
@@ -23,6 +24,9 @@ export default function NurseHeader({
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   const isAvailable = Boolean(nurse?.is_available_now);
+  const nurseName = getUserFullName(nurse, 'nurse');
+  const nurseInitials = getAvatarInitials(nurseName, 'NR');
+  const roleLabel = getRoleDisplayLabel('nurse'); // 'Nurse'
 
   return (
     <header className="sticky top-0 z-30 bg-[#fffdf9]/95 backdrop-blur-xs border-b border-[#e9e2d5] px-4 sm:px-6 py-3.5 flex items-center justify-between shadow-xs">
@@ -39,7 +43,7 @@ export default function NurseHeader({
         <div>
           <div className="flex items-center space-x-2">
             <h1 className="text-base sm:text-lg font-black text-[#1e1b14] tracking-tight">
-              {nurse?.name ? (nurse.name.startsWith('Nurse ') ? nurse.name : `Nurse ${nurse.name}`) : 'Nurse Care Specialist'}
+              Welcome, {nurseName}
             </h1>
           </div>
           <p className="text-xs font-semibold text-[#7b776c] hidden sm:block">
@@ -88,16 +92,16 @@ export default function NurseHeader({
         <div className="relative">
           <button
             onClick={() => setShowProfileMenu(!showProfileMenu)}
-            className="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-[#f3ede2] transition-colors"
+            className="flex items-center space-x-2 p-1.5 rounded-xl hover:bg-[#f3ede2] transition-colors cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-full bg-[#645e45] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-              {nurse?.name ? nurse.name.charAt(0).toUpperCase() : 'N'}
+            <div className="w-8 h-8 rounded-xl bg-[#645e45] text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
+              {nurseInitials}
             </div>
-            <div className="hidden lg:block text-left">
-              <p className="text-xs font-bold text-[#1e1b14] leading-none">{nurse?.name || 'Nurse'}</p>
-              <p className="text-[10px] text-[#7b776c] mt-0.5 font-medium">Verified Care Provider</p>
+            <div className="hidden md:block text-left leading-tight">
+              <p className="text-xs font-bold text-[#1e1b14] leading-none truncate max-w-[150px]">{nurseName}</p>
+              <p className="text-[10px] text-[#645e45] font-bold mt-0.5">{roleLabel}</p>
             </div>
-            <ChevronDown className="w-3.5 h-3.5 text-[#7b776c] hidden lg:block" />
+            <ChevronDown className="w-3.5 h-3.5 text-[#7b776c] hidden md:block" />
           </button>
 
           {showProfileMenu && (
@@ -108,7 +112,7 @@ export default function NurseHeader({
               />
               <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl shadow-xl border border-[#e9e2d5] p-2 z-50 animate-in fade-in zoom-in-95 duration-100">
                 <div className="px-3 py-2 border-b border-[#f0ece1]">
-                  <p className="text-xs font-black text-[#1e1b14]">{nurse?.name || 'Nurse Specialist'}</p>
+                  <p className="text-xs font-black text-[#1e1b14] truncate">{nurseName}</p>
                   <p className="text-[10px] text-[#7b776c] truncate">{nurse?.email || 'nurse@karunagrid.org'}</p>
                 </div>
 

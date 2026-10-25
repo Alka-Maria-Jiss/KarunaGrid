@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   X,
   HeartPulse,
@@ -59,7 +60,7 @@ export default function NurseCompleteVisitModal({
 
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/home-visits/occurrences/${visit.occurrence_id}/complete/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/occurrences/${visit.occurrence_id}/complete/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

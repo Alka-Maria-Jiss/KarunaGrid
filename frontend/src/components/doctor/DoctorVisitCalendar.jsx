@@ -26,6 +26,7 @@ import {
   Wind
 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
+import { API_ROOT } from '../../api/config';
 
 function formatYMD(date) {
   const y = date.getFullYear();
@@ -73,8 +74,8 @@ export default function DoctorVisitCalendar({
       };
 
       const [visitsRes, telemedRes] = await Promise.allSettled([
-        fetch('http://127.0.0.1:8000/api/care-coordination/home-visits/calendar/?scope=all', { headers }),
-        fetch('http://127.0.0.1:8000/api/doctor/telemedicine/consultations/', { headers })
+        fetch(`${API_ROOT}/care-coordination/home-visits/calendar/?scope=all`, { headers }),
+        fetch(`${API_ROOT}/doctor/telemedicine/consultations/`, { headers })
       ]);
 
       const combinedVisits = [];

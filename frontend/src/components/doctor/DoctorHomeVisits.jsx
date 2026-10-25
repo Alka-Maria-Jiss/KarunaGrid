@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   Home,
   Calendar,
@@ -29,7 +30,7 @@ export default function DoctorHomeVisits() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/doctor/home-visits/', {
+      const res = await fetch(`${API_ROOT}/doctor/home-visits/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

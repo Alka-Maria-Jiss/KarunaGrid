@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   X,
   Calendar,
@@ -31,7 +32,7 @@ export default function NurseReviewRequestModal({
     setErrorMsg('');
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/nurse/additional-requests/${request.occurrence_id}/approve/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/additional-requests/${request.occurrence_id}/approve/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -62,7 +63,7 @@ export default function NurseReviewRequestModal({
     setErrorMsg('');
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/nurse/additional-requests/${request.occurrence_id}/reschedule/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/additional-requests/${request.occurrence_id}/reschedule/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

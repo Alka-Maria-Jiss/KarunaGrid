@@ -48,3 +48,8 @@ playwright-report/
 coverage/
 tests/e2e/html-report/
 tests/e2e/test-results.json
+
+# Scratch and office temp files
+*.docx
+~$*.docx
+

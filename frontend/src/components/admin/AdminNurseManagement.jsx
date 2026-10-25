@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Activity, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, EyeOff, X, AlertCircle, Trash2 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import DeleteStaffConfirmationModal from './DeleteStaffConfirmationModal';
 
 export default function AdminNurseManagement({
   nurses = [],
@@ -10,6 +11,8 @@ export default function AdminNurseManagement({
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedNurse, setSelectedNurse] = useState(null);
+  const [nurseToDelete, setNurseToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form State for Add Nurse
   const [name, setName] = useState('');
@@ -21,10 +24,17 @@ export default function AdminNurseManagement({
 
   const { showSuccess, showError } = useToast();
 
+  const formatNurseName = (nurseName) => {
+    if (!nurseName) return '';
+    return nurseName.replace(/^nurse\s+/i, '').trim();
+  };
+
   const filteredNurses = nurses.filter((nurse) => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
+    const cleanName = formatNurseName(nurse.name).toLowerCase();
     return (
+      cleanName.includes(q) ||
       nurse.name?.toLowerCase().includes(q) ||
       nurse.email?.toLowerCase().includes(q) ||
       nurse.address?.toLowerCase().includes(q) ||
@@ -42,16 +52,22 @@ export default function AdminNurseManagement({
     }
   };
 
-  const handleDeleteNurse = async (nurse) => {
-    if (!window.confirm(`Are you sure you want to permanently delete nurse account ${nurse.name} (${nurse.email})? This action cannot be undone.`)) {
-      return;
-    }
+  const handleOpenDeleteModal = (nurse) => {
+    setNurseToDelete(nurse);
+  };
+
+  const handleConfirmDeleteNurse = async () => {
+    if (!nurseToDelete) return;
+    setIsDeleting(true);
     try {
-      const res = await apiClient.delete(`/admin/users/${nurse.user_id}/delete/`);
+      const res = await apiClient.delete(`/admin/users/${nurseToDelete.user_id}/delete/`);
       showSuccess(res.message || 'Nurse account removed successfully.');
+      setNurseToDelete(null);
       if (onRefresh) onRefresh();
     } catch (err) {
       showError(err.message || 'Failed to delete nurse account.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -156,7 +172,7 @@ export default function AdminNurseManagement({
                         <div className="w-7 h-7 rounded-lg bg-[#f5f1ea] text-[#695e3d] flex items-center justify-center font-extrabold text-xs border border-[#e7ded0]">
                           <Activity className="w-4 h-4" />
                         </div>
-                        <span>{nurse.name}</span>
+                        <span>{formatNurseName(nurse.name)}</span>
                       </div>
                     </td>
                     <td className="py-3.5 px-4 text-[#4a473d]">
@@ -202,7 +218,7 @@ export default function AdminNurseManagement({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteNurse(nurse)}
+                          onClick={() => handleOpenDeleteModal(nurse)}
                           className="p-1.5 rounded-lg border text-xs font-bold text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition-all cursor-pointer"
                           title="Delete Nurse Account"
                         >
@@ -360,7 +376,7 @@ export default function AdminNurseManagement({
             </div>
 
             <div className="space-y-2 text-xs text-[#1e1b14]">
-              <p><strong>Name:</strong> {selectedNurse.name}</p>
+              <p><strong>Name:</strong> {formatNurseName(selectedNurse.name)}</p>
               <p><strong>Email:</strong> {selectedNurse.email}</p>
               <p><strong>Phone:</strong> {selectedNurse.phone || 'N/A'}</p>
               <p><strong>Service Area:</strong> {selectedNurse.address || selectedNurse.details?.service_area || 'Community Cluster'}</p>
@@ -380,6 +396,18 @@ export default function AdminNurseManagement({
           </div>
         </div>
       )}
+
+      {/* DELETE NURSE CONFIRMATION MODAL */}
+      <DeleteStaffConfirmationModal
+        isOpen={!!nurseToDelete}
+        staffType="Nurse"
+        staffMember={nurseToDelete ? { ...nurseToDelete, name: formatNurseName(nurseToDelete.name) } : null}
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmDeleteNurse}
+        onClose={() => {
+          if (!isDeleting) setNurseToDelete(null);
+        }}
+      />
     </div>
   );
 }

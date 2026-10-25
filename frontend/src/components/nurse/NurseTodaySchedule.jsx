@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -54,7 +55,7 @@ export default function NurseTodaySchedule({
     setIsFetchingCalendar(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/home-visits/calendar/?scope=all', {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/calendar/?scope=all`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

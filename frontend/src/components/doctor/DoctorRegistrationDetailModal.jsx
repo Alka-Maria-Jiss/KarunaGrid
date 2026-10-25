@@ -28,11 +28,13 @@ export default function DoctorRegistrationDetailModal({
     if (onReject) onReject(patient.patient_id, rejectionReason.trim());
   };
 
-  const docUrl = patient.discharge_summary_path
-    ? (patient.discharge_summary_path.startsWith('http') || patient.discharge_summary_path.startsWith('/media/')
-        ? patient.discharge_summary_path
-        : `/media/${patient.discharge_summary_path}`)
-    : null;
+  const docUrl = patient.discharge_summary_url
+    ? patient.discharge_summary_url
+    : (patient.discharge_summary_path
+        ? (patient.discharge_summary_path.startsWith('http') || patient.discharge_summary_path.startsWith('/media/')
+            ? patient.discharge_summary_path
+            : `/media/${patient.discharge_summary_path}`)
+        : null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-in fade-in duration-150">

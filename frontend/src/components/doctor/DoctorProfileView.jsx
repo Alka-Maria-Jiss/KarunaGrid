@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import { getUserFullName, getAvatarInitials } from '../../utils/userProfileUtils';
 
 export default function DoctorProfileView({
   user,
@@ -207,11 +208,15 @@ export default function DoctorProfileView({
       setIsEditing(false);
 
       if (onUpdateUser) {
-        onUpdateUser({
+        const freshUser = {
           ...user,
           name: updatedProfile.name,
           email: updatedProfile.email,
-        });
+        };
+        try {
+          localStorage.setItem('user_info', JSON.stringify(freshUser));
+        } catch (e) {}
+        onUpdateUser(freshUser);
       }
       if (onRefresh) onRefresh();
     } catch (err) {
@@ -233,8 +238,8 @@ export default function DoctorProfileView({
     );
   }
 
-  const docName = profile?.name ? `Dr. ${profile.name.replace(/^Dr\.\s*/i, '')}` : (user?.name || 'Dr. Specialist');
-  const docInitials = (profile?.name || user?.name || 'Doctor').charAt(0).toUpperCase();
+  const docName = getUserFullName(profile || user, 'doctor');
+  const docInitials = getAvatarInitials(docName, 'DR');
 
   return (
     <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in duration-150">

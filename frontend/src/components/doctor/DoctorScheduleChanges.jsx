@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { CalendarDays, CheckCircle2, XCircle, AlertCircle, RefreshCw, X, User } from 'lucide-react';
+import { API_ROOT } from '../../api/config';
 
 export default function DoctorScheduleChanges() {
   const [requests, setRequests] = useState([]);
@@ -14,7 +15,7 @@ export default function DoctorScheduleChanges() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/doctor/schedule-changes/', {
+      const res = await fetch(`${API_ROOT}/care-coordination/doctor/schedule-changes/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -39,7 +40,7 @@ export default function DoctorScheduleChanges() {
     setIsProcessing(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/doctor/schedule-changes/${scheduleId}/review/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/doctor/schedule-changes/${scheduleId}/review/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -68,7 +69,7 @@ export default function DoctorScheduleChanges() {
     setIsProcessing(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/doctor/schedule-changes/${selectedRequest.schedule_id}/review/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/doctor/schedule-changes/${selectedRequest.schedule_id}/review/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

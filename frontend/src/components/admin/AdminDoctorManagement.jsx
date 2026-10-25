@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Stethoscope, UserPlus, Search, ShieldCheck, Power, Phone, MapPin, Eye, EyeOff, X, CheckCircle2, AlertCircle, Trash2 } from 'lucide-react';
 import apiClient from '../../api/apiClient';
 import { useToast } from '../../context/ToastContext';
+import DeleteStaffConfirmationModal from './DeleteStaffConfirmationModal';
 
 export default function AdminDoctorManagement({
   doctors = [],
@@ -10,6 +11,8 @@ export default function AdminDoctorManagement({
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [doctorToDelete, setDoctorToDelete] = useState(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   // Form State for Add Doctor
   const [name, setName] = useState('');
@@ -42,16 +45,22 @@ export default function AdminDoctorManagement({
     }
   };
 
-  const handleDeleteDoctor = async (doc) => {
-    if (!window.confirm(`Are you sure you want to permanently delete doctor account ${doc.name} (${doc.email})? This action cannot be undone.`)) {
-      return;
-    }
+  const handleOpenDeleteModal = (doc) => {
+    setDoctorToDelete(doc);
+  };
+
+  const handleConfirmDeleteDoctor = async () => {
+    if (!doctorToDelete) return;
+    setIsDeleting(true);
     try {
-      const res = await apiClient.delete(`/admin/users/${doc.user_id}/delete/`);
+      const res = await apiClient.delete(`/admin/users/${doctorToDelete.user_id}/delete/`);
       showSuccess(res.message || 'Doctor account removed successfully.');
+      setDoctorToDelete(null);
       if (onRefresh) onRefresh();
     } catch (err) {
       showError(err.message || 'Failed to delete doctor account.');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -206,7 +215,7 @@ export default function AdminDoctorManagement({
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleDeleteDoctor(doc)}
+                          onClick={() => handleOpenDeleteModal(doc)}
                           className="p-1.5 rounded-lg border text-xs font-bold text-rose-700 bg-rose-50 border-rose-200 hover:bg-rose-100 transition-all cursor-pointer"
                           title="Delete Doctor Account"
                         >
@@ -385,6 +394,18 @@ export default function AdminDoctorManagement({
           </div>
         </div>
       )}
+
+      {/* DELETE DOCTOR CONFIRMATION MODAL */}
+      <DeleteStaffConfirmationModal
+        isOpen={!!doctorToDelete}
+        staffType="Doctor"
+        staffMember={doctorToDelete}
+        isDeleting={isDeleting}
+        onConfirm={handleConfirmDeleteDoctor}
+        onClose={() => {
+          if (!isDeleting) setDoctorToDelete(null);
+        }}
+      />
     </div>
   );
 }

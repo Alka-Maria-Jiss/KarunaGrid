@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -62,7 +63,7 @@ export default function NurseVisitCalendar({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/home-visits/calendar/?scope=all`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/calendar/?scope=all`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -82,7 +83,7 @@ export default function NurseVisitCalendar({
   const fetchDoctors = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/home-visits/available-doctors/', {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/available-doctors/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -130,7 +131,7 @@ export default function NurseVisitCalendar({
     setFeedbackMsg({ text: '', type: '' });
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/home-visits/occurrences/${assignDoctorModal.occurrence_id}/assign-doctor/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/home-visits/occurrences/${assignDoctorModal.occurrence_id}/assign-doctor/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

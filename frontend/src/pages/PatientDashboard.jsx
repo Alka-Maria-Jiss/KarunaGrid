@@ -130,7 +130,12 @@ export default function PatientDashboard({ user, onLogout }) {
     fetchPatientData();
   }, []);
 
-  const patientInfo = dashboardData.patient_info || {};
+  const patientInfo = {
+    ...(currentUser || user),
+    ...(currentUser || user)?.details,
+    ...dashboardData.patient_info,
+    name: (currentUser || user)?.name || dashboardData.patient_info?.name || (currentUser || user)?.details?.name,
+  };
   const status = (patientInfo.registration_status || user?.status || 'PENDING').toUpperCase();
   const unreadCount = dashboardData.summary_cards?.unread_notifications_count ?? 0;
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   FileSpreadsheet,
   Search,
@@ -25,7 +26,7 @@ export default function NurseLaboratoryReports() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/medical-records/nurse/lab-reports/?status=${statusFilter}`, {
+      const res = await fetch(`${API_ROOT}/medical-records/nurse/lab-reports/?status=${statusFilter}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -54,7 +55,7 @@ export default function NurseLaboratoryReports() {
     setFeedback({ text: '', type: '' });
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/medical-records/nurse/lab-reports/${selectedReport.report_id}/review/`, {
+      const res = await fetch(`${API_ROOT}/medical-records/nurse/lab-reports/${selectedReport.report_id}/review/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -83,7 +84,7 @@ export default function NurseLaboratoryReports() {
   const handleOpenDocument = (filePath) => {
     if (!filePath) return;
     const token = localStorage.getItem('access_token');
-    const url = `http://127.0.0.1:8000/api/documents/view/?path=${encodeURIComponent(filePath)}`;
+    const url = `${API_ROOT}/documents/view/?path=${encodeURIComponent(filePath)}`;
     window.open(url, '_blank');
   };
 

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Menu, Bell, ChevronDown, User, ShieldCheck, LogOut, CheckCheck } from 'lucide-react';
 import NotificationDropdown from '../NotificationDropdown';
+import { getUserFullName, getAvatarInitials, getRoleDisplayLabel } from '../../utils/userProfileUtils';
 
 const viewTitles = {
   dashboard: 'Administrator Dashboard',
@@ -43,7 +44,9 @@ export default function AdminHeader({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const adminName = user?.name || 'Admin';
+  const adminName = getUserFullName(user, 'admin');
+  const adminInitials = getAvatarInitials(adminName, 'AD');
+  const roleLabel = getRoleDisplayLabel('admin'); // 'System Administrator'
 
   return (
     <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-[#e9e2d5] px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between shadow-xs">
@@ -83,12 +86,12 @@ export default function AdminHeader({
           >
             {/* Avatar with Initials */}
             <div className="w-8 h-8 rounded-xl bg-[#645e45] text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
-              {adminName.slice(0, 2).toUpperCase()}
+              {adminInitials}
             </div>
 
             <div className="text-left hidden md:block leading-tight">
-              <p className="text-xs font-extrabold text-[#1e1b14]">{adminName}</p>
-              <p className="text-[10px] font-bold text-[#645e45] uppercase tracking-wider">Administrator</p>
+              <p className="text-xs font-extrabold text-[#1e1b14] truncate max-w-[170px]">{adminName}</p>
+              <p className="text-[10px] font-bold text-[#645e45] uppercase tracking-wider">{roleLabel}</p>
             </div>
 
             <ChevronDown

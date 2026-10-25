@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   Clock,
   User,
@@ -23,7 +24,7 @@ export default function NursePatientTimeline({
   const fetchPatients = async () => {
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/nurse/patients/', {
+      const res = await fetch(`${API_ROOT}/nurse/patients/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -46,7 +47,7 @@ export default function NursePatientTimeline({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/nurse/patients/${patientId}/timeline/`, {
+      const res = await fetch(`${API_ROOT}/nurse/patients/${patientId}/timeline/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

@@ -171,7 +171,8 @@ def check_user_approval_and_get_profile(user):
                 status=status.HTTP_403_FORBIDDEN,
             )
         if doctor:
-            profile_name = f"Dr. {doctor.name}"
+            raw_doc_name = (doctor.name or "").strip()
+            profile_name = raw_doc_name if raw_doc_name.lower().startswith("dr.") else f"Dr. {raw_doc_name}"
 
     elif role == Role.NURSE:
         nurse = getattr(user, 'nurse', None)
@@ -190,11 +191,14 @@ def check_user_approval_and_get_profile(user):
                 status=status.HTTP_403_FORBIDDEN,
             )
         if nurse:
-            profile_name = f"Nurse {nurse.name}"
+            raw_nurse_name = (nurse.name or "").strip()
+            profile_name = re.sub(r'(?i)^nurse\s+', '', raw_nurse_name).strip()
 
     elif role == Role.ADMIN:
         admin_obj = getattr(user, 'administrator', None)
-        if admin_obj:
+        if not admin_obj:
+            admin_obj = Administrator.objects.filter(user=user).first()
+        if admin_obj and admin_obj.name:
             profile_name = admin_obj.name
 
     return profile_name, None
@@ -876,7 +880,8 @@ class CurrentUserProfileView(APIView):
             }
         elif user.role == Role.DOCTOR and hasattr(user, 'doctor'):
             d = user.doctor
-            profile_data["name"] = d.name
+            raw_doc_name = (d.name or "").strip()
+            profile_data["name"] = raw_doc_name if raw_doc_name.lower().startswith("dr.") else f"Dr. {raw_doc_name}"
             profile_data["status"] = d.verification_status
             profile_data["details"] = {
                 "doctor_id": d.doctor_id,
@@ -890,7 +895,8 @@ class CurrentUserProfileView(APIView):
             }
         elif user.role == Role.NURSE and hasattr(user, 'nurse'):
             n = user.nurse
-            profile_data["name"] = n.name
+            raw_nurse_name = (n.name or "").strip()
+            profile_data["name"] = re.sub(r'(?i)^nurse\s+', '', raw_nurse_name).strip()
             profile_data["status"] = n.verification_status
             profile_data["details"] = {
                 "nurse_id": n.nurse_id,
@@ -902,20 +908,25 @@ class CurrentUserProfileView(APIView):
                 "qualification": n.qualification,
                 "experience": n.experience,
             }
-        elif user.role == Role.ADMIN and hasattr(user, 'administrator'):
-            a = user.administrator
-            profile_data["name"] = a.name
-            profile_data["details"] = {
-                "admin_id": a.admin_id,
-                "admin_code": f"KG-ADM-{str(a.admin_id).zfill(4)}",
-                "phone": a.phone,
-                "gender": a.gender,
-                "date_of_birth": str(a.date_of_birth) if a.date_of_birth else None,
-                "qualification": a.qualification,
-                "experience": a.experience if a.experience is not None else 0,
-                "designation": "System Administrator",
-                "created_at": a.created_at.isoformat() if a.created_at else None,
-            }
+        elif user.role == Role.ADMIN:
+            admin_obj = getattr(user, 'administrator', None)
+            if not admin_obj:
+                admin_obj = Administrator.objects.filter(user=user).first()
+            if admin_obj and admin_obj.name:
+                profile_data["name"] = admin_obj.name
+                profile_data["details"] = {
+                    "admin_id": admin_obj.admin_id,
+                    "admin_code": f"KG-ADM-{str(admin_obj.admin_id).zfill(4)}",
+                    "phone": admin_obj.phone,
+                    "gender": admin_obj.gender,
+                    "date_of_birth": str(admin_obj.date_of_birth) if admin_obj.date_of_birth else None,
+                    "qualification": admin_obj.qualification,
+                    "experience": admin_obj.experience if admin_obj.experience is not None else 0,
+                    "designation": "System Administrator",
+                    "created_at": admin_obj.created_at.isoformat() if admin_obj.created_at else None,
+                }
+            else:
+                profile_data["name"] = "System Administrator"
 
         return Response(profile_data, status=status.HTTP_200_OK)
 
@@ -1877,7 +1888,7 @@ class AdminUserListView(APIView):
                 }
             elif u.role == Role.NURSE and hasattr(u, 'nurse'):
                 raw_name = (u.nurse.name or "").strip()
-                name = raw_name if raw_name.lower().startswith("nurse") else f"Nurse {raw_name}"
+                name = re.sub(r'(?i)^nurse\s+', '', raw_name).strip()
                 phone = u.nurse.phone or ""
                 address = u.nurse.service_area or ""
                 details = {
@@ -3004,7 +3015,7 @@ class AdminReportsView(APIView):
                             continue
                     records.append({
                         "id": f"nurse_{n.nurse_id}",
-                        "name": f"Nurse {n.name}",
+                        "name": re.sub(r'(?i)^nurse\s+', '', (n.name or '')).strip(),
                         "role": "Nurse",
                         "email": n.user.email,
                         "phone": n.phone or "N/A",

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Menu, ChevronDown, Stethoscope, User, LogOut, CheckCircle2, Circle } from 'lucide-react';
 import NotificationDropdown from '../NotificationDropdown';
+import { getUserFullName, getAvatarInitials, getRoleDisplayLabel } from '../../utils/userProfileUtils';
 
 export default function DoctorHeader({
   doctorInfo = {},
@@ -16,8 +17,29 @@ export default function DoctorHeader({
   const profileMenuRef = useRef(null);
   const availabilityMenuRef = useRef(null);
 
-  const isAvailable = Boolean(doctorInfo.is_available_now);
-  const doctorName = doctorInfo.name ? `Dr. ${doctorInfo.name}` : 'Dr. Palliative Specialist';
+  // Ensure we check doctorInfo, and fallback to localStorage user_info if doctorInfo lacks name
+  let effectiveDoctor = doctorInfo || {};
+  if (!effectiveDoctor.name) {
+    try {
+      const stored = localStorage.getItem('user_info');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        effectiveDoctor = {
+          ...parsed,
+          ...effectiveDoctor,
+          name: effectiveDoctor.name || parsed.name || parsed.details?.name || '',
+          email: effectiveDoctor.email || parsed.email || '',
+        };
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const isAvailable = Boolean(effectiveDoctor.is_available_now);
+  const doctorName = getUserFullName(effectiveDoctor, 'doctor');
+  const doctorInitials = getAvatarInitials(doctorName, 'DR');
+  const roleLabel = getRoleDisplayLabel('doctor'); // 'Doctor'
 
   // Close dropdowns on outside click
   useEffect(() => {
@@ -99,14 +121,14 @@ export default function DoctorHeader({
             onClick={() => setShowProfileMenu((prev) => !prev)}
             className="flex items-center gap-2 p-1.5 pr-2.5 rounded-xl hover:bg-[#f4ede0] transition-colors cursor-pointer"
           >
-            <div className="w-8 h-8 rounded-xl bg-[#645e45] text-white flex items-center justify-center font-black text-xs shadow-xs">
-              {doctorInfo.name ? doctorInfo.name.charAt(0) : 'D'}
+            <div className="w-8 h-8 rounded-xl bg-[#645e45] text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
+              {doctorInitials}
             </div>
-            <div className="text-left hidden md:block">
-              <p className="text-xs font-black text-[#1e1b14] leading-none truncate max-w-[130px]">
+            <div className="text-left hidden md:block leading-tight">
+              <p className="text-xs font-black text-[#1e1b14] leading-none truncate max-w-[200px]" title={doctorName}>
                 {doctorName}
               </p>
-              <p className="text-[10px] text-[#7b776c] font-semibold">Doctor</p>
+              <p className="text-[10px] text-[#645e45] font-bold mt-0.5">{roleLabel}</p>
             </div>
             <ChevronDown className="w-3.5 h-3.5 text-[#7b776c]" />
           </button>
@@ -115,7 +137,7 @@ export default function DoctorHeader({
             <div className="absolute right-0 mt-2 w-52 bg-white rounded-2xl border border-[#e9e2d5] shadow-lg py-1.5 text-xs animate-in fade-in zoom-in-95 duration-100 z-50">
               <div className="px-4 py-2 border-b border-[#f2ece1]">
                 <p className="font-black text-[#1e1b14]">{doctorName}</p>
-                <p className="text-[11px] text-[#7b776c] truncate">{doctorInfo.email}</p>
+                <p className="text-[11px] text-[#7b776c] truncate">{effectiveDoctor.email || ''}</p>
               </div>
 
               <div className="py-1">

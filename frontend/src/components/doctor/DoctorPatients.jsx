@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   Users,
   Search,
@@ -37,7 +38,7 @@ export default function DoctorPatients({
       if (searchQuery) queryParams.append('search', searchQuery);
       if (statusFilter !== 'All') queryParams.append('status', statusFilter);
 
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/?${queryParams.toString()}`, {
+      const res = await fetch(`${API_ROOT}/doctor/patients/?${queryParams.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

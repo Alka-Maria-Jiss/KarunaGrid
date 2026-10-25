@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Clock, UserCheck, Video, Home, Pill, FileSpreadsheet, Boxes, AlertCircle, RefreshCw, ArrowLeft } from 'lucide-react';
+import { API_ROOT } from '../../api/config';
 
 export default function DoctorPatientTimeline({
   initialPatientId = null,
@@ -14,7 +15,7 @@ export default function DoctorPatientTimeline({
     const fetchPatientList = async () => {
       try {
         const token = localStorage.getItem('access_token');
-        const res = await fetch('http://127.0.0.1:8000/api/doctor/patients/?status=Approved', {
+        const res = await fetch(`${API_ROOT}/doctor/patients/?status=Approved`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
@@ -39,7 +40,7 @@ export default function DoctorPatientTimeline({
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/timeline/`, {
+      const res = await fetch(`${API_ROOT}/doctor/patients/${patientId}/timeline/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

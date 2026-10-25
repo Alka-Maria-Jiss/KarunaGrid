@@ -24,6 +24,7 @@ import DoctorNotifications from '../components/doctor/DoctorNotifications';
 import DoctorProfileView from '../components/doctor/DoctorProfileView';
 
 import { RefreshCw } from 'lucide-react';
+import apiClient from '../api/apiClient';
 
 export default function DoctorDashboard({ user, onLogout }) {
   const [currentView, setCurrentView] = useState('dashboard');
@@ -37,33 +38,41 @@ export default function DoctorDashboard({ user, onLogout }) {
   const [reviewModalPatient, setReviewModalPatient] = useState(null);
   const [isProcessingApproval, setIsProcessingApproval] = useState(false);
 
+  // Sync state if user prop changes
+  useEffect(() => {
+    if (user) {
+      setCurrentUser(user);
+    }
+  }, [user]);
+
   // 1. Authenticated Doctor verification & Dashboard data load
   const fetchDashboardData = async () => {
     try {
-      const token = localStorage.getItem('access_token');
-
-      if (!token) {
-        if (onLogout) onLogout();
-        else window.location.href = '/login';
-        return;
-      }
-
-      const res = await fetch('http://127.0.0.1:8000/api/doctor/dashboard/', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (res.ok) {
-        const data = await res.json();
+      const data = await apiClient.get('/doctor/dashboard/');
+      if (data) {
         setDoctorData(data);
-      } else if (res.status === 401 || res.status === 403) {
-        if (onLogout) onLogout();
-        else window.location.href = '/login';
+        if (data.doctor_info?.name) {
+          setCurrentUser((prev) => {
+            const updated = {
+              ...(prev || {}),
+              ...data.doctor_info,
+              name: data.doctor_info.name,
+            };
+            try {
+              localStorage.setItem('user_info', JSON.stringify(updated));
+            } catch {
+              // ignore
+            }
+            return updated;
+          });
+        }
       }
     } catch (err) {
       console.error('Error loading doctor dashboard data:', err);
+      if (err.status === 401 || err.status === 403) {
+        if (onLogout) onLogout();
+        else window.location.href = '/login';
+      }
     } finally {
       setIsLoading(false);
     }
@@ -77,26 +86,14 @@ export default function DoctorDashboard({ user, onLogout }) {
   const handleToggleAvailability = async (newStatus) => {
     setIsTogglingAvailability(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/doctor/availability/', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const data = await apiClient.post('/doctor/availability/', { is_available_now: newStatus });
+      setDoctorData((prev) => ({
+        ...prev,
+        doctor_info: {
+          ...prev?.doctor_info,
+          is_available_now: data.is_available_now,
         },
-        body: JSON.stringify({ is_available_now: newStatus }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        setDoctorData((prev) => ({
-          ...prev,
-          doctor_info: {
-            ...prev?.doctor_info,
-            is_available_now: data.is_available_now,
-          },
-        }));
-      }
+      }));
     } catch (err) {
       console.error('Error toggling availability:', err);
     } finally {
@@ -108,18 +105,9 @@ export default function DoctorDashboard({ user, onLogout }) {
   const handleModalApprove = async (patientId) => {
     setIsProcessingApproval(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/approve/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
-      if (res.ok) {
-        setReviewModalPatient(null);
-        fetchDashboardData();
-      }
+      await apiClient.post(`/doctor/patients/${patientId}/approve/`);
+      setReviewModalPatient(null);
+      await fetchDashboardData();
     } catch (err) {
       console.error('Error approving registration:', err);
     } finally {
@@ -130,19 +118,9 @@ export default function DoctorDashboard({ user, onLogout }) {
   const handleModalReject = async (patientId, reason) => {
     setIsProcessingApproval(true);
     try {
-      const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/doctor/patients/${patientId}/reject/`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ rejection_reason: reason }),
-      });
-      if (res.ok) {
-        setReviewModalPatient(null);
-        fetchDashboardData();
-      }
+      await apiClient.post(`/doctor/patients/${patientId}/reject/`, { rejection_reason: reason });
+      setReviewModalPatient(null);
+      await fetchDashboardData();
     } catch (err) {
       console.error('Error rejecting registration:', err);
     } finally {
@@ -198,7 +176,37 @@ export default function DoctorDashboard({ user, onLogout }) {
     );
   }
 
-  const doctorInfo = doctorData?.doctor_info || {};
+  const candidateDoctorName = [
+    doctorData?.doctor_info?.name,
+    currentUser?.name,
+    user?.name,
+    currentUser?.details?.name,
+    user?.details?.name,
+    doctorData?.doctor_info?.full_name,
+  ].find((n) => typeof n === 'string' && n.trim().length > 0) || '';
+
+  const doctorInfo = {
+    ...(user || {}),
+    ...(currentUser || {}),
+    ...(doctorData?.doctor_info || {}),
+    name: candidateDoctorName,
+    email: doctorData?.doctor_info?.email || currentUser?.email || user?.email || '',
+    is_available_now:
+      doctorData?.doctor_info?.is_available_now ??
+      currentUser?.is_available_now ??
+      user?.is_available_now ??
+      false,
+    specialization:
+      doctorData?.doctor_info?.specialization ||
+      currentUser?.details?.specialization ||
+      user?.details?.specialization ||
+      'Community Palliative Medicine',
+    service_area:
+      doctorData?.doctor_info?.service_area ||
+      currentUser?.details?.service_area ||
+      user?.details?.service_area ||
+      'District Service Area',
+  };
   const summary = doctorData?.summary_cards || {};
   const todaySchedule = doctorData?.today_schedule || [];
   const pendingRegistrations = doctorData?.pending_registrations || [];

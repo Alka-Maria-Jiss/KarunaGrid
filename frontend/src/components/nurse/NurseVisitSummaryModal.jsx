@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   X,
   UploadCloud,
@@ -51,7 +52,7 @@ export default function NurseVisitSummaryModal({
 
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/nurse/visits/${visit.occurrence_id}/summary-upload/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/visits/${visit.occurrence_id}/summary-upload/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

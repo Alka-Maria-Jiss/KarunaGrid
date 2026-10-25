@@ -180,7 +180,10 @@ export default function AdminReportsPage() {
         break;
       case 'staff':
         headers = ['ID', 'Name', 'Role', 'Email', 'Phone', 'Specialization', 'Service Area', 'Availability', 'Status', 'Experience', 'Joined Date'];
-        extractRow = (r) => [r.id, `"${r.name}"`, r.role, r.email, r.phone, `"${r.specialization}"`, `"${r.service_area}"`, r.availability, r.status, r.experience, r.joined_date];
+        extractRow = (r) => {
+          const cleanName = r.role?.toLowerCase() === 'nurse' ? (r.name || '').replace(/^nurse\s+/i, '').trim() : r.name;
+          return [r.id, `"${cleanName}"`, r.role, r.email, r.phone, `"${r.specialization}"`, `"${r.service_area}"`, r.availability, r.status, r.experience, r.joined_date];
+        };
         break;
       case 'home_visits':
         headers = ['Visit ID', 'Scheduled Date', 'Patient Name', 'Patient Reg ID', 'Visiting Doctor', 'Allocated Nurse', 'Status', 'Visit Type', 'Urgency Level', 'Notes'];
@@ -820,7 +823,9 @@ export default function AdminReportsPage() {
                       {/* Category: Staff */}
                       {selectedCategory === 'staff' && (
                         <>
-                          <td className="px-5 py-3.5 font-bold text-[#1e1b14]">{row.name}</td>
+                          <td className="px-5 py-3.5 font-bold text-[#1e1b14]">
+                            {row.role?.toLowerCase() === 'nurse' ? (row.name || '').replace(/^nurse\s+/i, '').trim() : row.name}
+                          </td>
                           <td className="px-5 py-3.5">
                             <span className={`px-2 py-0.5 text-[10px] font-extrabold rounded-md ${
                               row.role === 'Doctor' ? 'bg-purple-100 text-purple-900' : 'bg-blue-100 text-blue-900'

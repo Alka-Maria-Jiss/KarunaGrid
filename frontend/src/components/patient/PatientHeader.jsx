@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Menu, User, ChevronDown, LogOut, CheckCircle2, ShieldAlert } from 'lucide-react';
 import NotificationDropdown from '../NotificationDropdown';
+import { getUserFullName, getAvatarInitials, getRoleDisplayLabel } from '../../utils/userProfileUtils';
 
 export default function PatientHeader({
   patientInfo = {},
@@ -11,7 +12,9 @@ export default function PatientHeader({
 }) {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
-  const patientName = patientInfo.name || 'Patient';
+  const patientName = getUserFullName(patientInfo, 'patient');
+  const patientInitials = getAvatarInitials(patientName, 'PT');
+  const roleLabel = getRoleDisplayLabel('patient'); // 'Patient'
   const status = patientInfo.registration_status || 'Pending';
 
   return (
@@ -65,18 +68,22 @@ export default function PatientHeader({
           <button
             type="button"
             onClick={() => setIsProfileOpen(!isProfileOpen)}
-            className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-xl bg-white hover:bg-[#f4ede0] border border-[#e9e2d5] transition-all cursor-pointer shadow-2xs"
+            className="flex items-center gap-2.5 p-1.5 sm:px-3 sm:py-1.5 rounded-2xl bg-white hover:bg-[#f4ede0] border border-[#e9e2d5] transition-all cursor-pointer shadow-2xs"
           >
-            <div className="w-7 h-7 rounded-lg bg-[#f4ede0] text-[#645e45] flex items-center justify-center font-bold text-xs border border-[#e0d9cc]">
-              <User className="w-4 h-4" />
+            <div className="w-8 h-8 rounded-xl bg-[#645e45] text-white flex items-center justify-center font-extrabold text-xs shadow-xs">
+              {patientInitials}
             </div>
-            <div className="hidden md:block text-left">
-              <p className="text-xs font-extrabold text-[#1e1b14] leading-tight">
+            <div className="hidden md:block text-left leading-tight">
+              <p className="text-xs font-extrabold text-[#1e1b14] leading-tight truncate max-w-[150px]">
                 {patientName}
               </p>
-              <p className="text-[10px] font-semibold text-[#7b776c]">Patient</p>
+              <p className="text-[10px] text-[#645e45] font-bold mt-0.5">{roleLabel}</p>
             </div>
-            <ChevronDown className="w-3.5 h-3.5 text-[#7b776c] hidden sm:block" />
+            <ChevronDown
+              className={`w-3.5 h-3.5 text-[#7b776c] transition-transform duration-150 ${
+                isProfileOpen ? 'rotate-180' : ''
+              }`}
+            />
           </button>
 
           {/* Dropdown Menu */}

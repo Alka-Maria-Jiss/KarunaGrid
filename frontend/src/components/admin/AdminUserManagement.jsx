@@ -29,10 +29,20 @@ export default function AdminUserManagement({ users = [], onRefresh, onNavigate 
   const [selectedUser, setSelectedUser] = useState(null);
   const { showSuccess, showError } = useToast();
 
+  const formatUserName = (user) => {
+    if (!user || !user.name) return '';
+    if (user.role?.toLowerCase() === 'nurse') {
+      return user.name.replace(/^nurse\s+/i, '').trim();
+    }
+    return user.name;
+  };
+
   const filteredUsers = users.filter((u) => {
     const matchesRole = roleFilter === 'all' || u.role?.toLowerCase() === roleFilter.toLowerCase();
+    const cleanName = formatUserName(u).toLowerCase();
     const matchesSearch =
       !searchQuery ||
+      cleanName.includes(searchQuery.toLowerCase()) ||
       u.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       u.role?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -164,7 +174,7 @@ export default function AdminUserManagement({ users = [], onRefresh, onNavigate 
                             <RoleIcon className="w-3.5 h-3.5" />
                           </div>
                           <div>
-                            <p>{u.name}</p>
+                            <p>{formatUserName(u)}</p>
                             <p className="text-[11px] text-[#7b776c] font-medium">{u.email}</p>
                           </div>
                         </div>
@@ -243,7 +253,7 @@ export default function AdminUserManagement({ users = [], onRefresh, onNavigate 
             </div>
 
             <div className="space-y-2 text-xs text-[#1e1b14]">
-              <p><strong>Name:</strong> {selectedUser.name}</p>
+              <p><strong>Name:</strong> {formatUserName(selectedUser)}</p>
               <p><strong>Email:</strong> {selectedUser.email}</p>
               <p><strong>Role:</strong> {selectedUser.role}</p>
               <p><strong>Phone:</strong> {selectedUser.phone || 'N/A'}</p>

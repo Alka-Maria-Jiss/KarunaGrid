@@ -200,11 +200,15 @@ export default function AdminProfileView({
 
       // Notify parent to update user header state
       if (onUpdateUser) {
-        onUpdateUser({
+        const freshUser = {
           ...user,
           name: updatedProfile.name,
           email: updatedProfile.email,
-        });
+        };
+        try {
+          localStorage.setItem('user_info', JSON.stringify(freshUser));
+        } catch (e) {}
+        onUpdateUser(freshUser);
       }
     } catch (err) {
       if (err.data?.errors) {

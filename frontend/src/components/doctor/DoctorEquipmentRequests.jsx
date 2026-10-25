@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Boxes, CheckCircle2, XCircle, AlertCircle, RefreshCw, X, User } from 'lucide-react';
+import { API_ROOT } from '../../api/config';
 
 export default function DoctorEquipmentRequests() {
   const [requests, setRequests] = useState([]);
@@ -14,7 +15,7 @@ export default function DoctorEquipmentRequests() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/resources/doctor/equipment-requests/', {
+      const res = await fetch(`${API_ROOT}/resources/doctor/equipment-requests/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -39,7 +40,7 @@ export default function DoctorEquipmentRequests() {
     setIsProcessing(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/resources/doctor/equipment-requests/${requestId}/review/`, {
+      const res = await fetch(`${API_ROOT}/resources/doctor/equipment-requests/${requestId}/review/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -68,7 +69,7 @@ export default function DoctorEquipmentRequests() {
     setIsProcessing(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/resources/doctor/equipment-requests/${selectedRequest.request_id}/review/`, {
+      const res = await fetch(`${API_ROOT}/resources/doctor/equipment-requests/${selectedRequest.request_id}/review/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

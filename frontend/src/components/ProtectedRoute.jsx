@@ -2,7 +2,14 @@ import React, { useEffect, useState } from 'react';
 import apiClient from '../api/apiClient';
 
 export default function ProtectedRoute({ allowedRole, onUnauthenticated, onRoleMismatch, children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(() => {
+    try {
+      const stored = localStorage.getItem('user_info');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -15,6 +22,7 @@ export default function ProtectedRoute({ allowedRole, onUnauthenticated, onRoleM
     const checkUserAuth = async () => {
       try {
         const profile = await apiClient.get('/auth/me/');
+        localStorage.setItem('user_info', JSON.stringify(profile));
         setUser(profile);
 
         if (allowedRole && profile.role.toLowerCase() !== allowedRole.toLowerCase()) {

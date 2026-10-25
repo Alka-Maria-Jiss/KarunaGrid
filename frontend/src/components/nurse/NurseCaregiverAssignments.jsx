@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_ROOT } from '../../api/config';
 import {
   UserPlus,
   Users,
@@ -29,7 +30,7 @@ export default function NurseCaregiverAssignments() {
     setIsLoading(true);
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/nurse/caregiver-assignments/', {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/caregiver-assignments/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -60,7 +61,7 @@ export default function NurseCaregiverAssignments() {
     setFeedback({ text: '', type: '' });
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch('http://127.0.0.1:8000/api/care-coordination/nurse/caregiver-assignments/', {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/caregiver-assignments/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -91,7 +92,7 @@ export default function NurseCaregiverAssignments() {
 
     try {
       const token = localStorage.getItem('access_token');
-      const res = await fetch(`http://127.0.0.1:8000/api/care-coordination/nurse/caregiver-assignments/${assignmentId}/end/`, {
+      const res = await fetch(`${API_ROOT}/care-coordination/nurse/caregiver-assignments/${assignmentId}/end/`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
