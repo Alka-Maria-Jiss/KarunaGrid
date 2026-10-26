@@ -52,6 +52,7 @@ from care_coordination.caregiver_views import (
     CaregiverCompleteCareView,
     CaregiverCareHistoryView,
     CaregiverComplaintsView,
+    CaregiverProfileView,
 )
 
 urlpatterns = [
@@ -143,4 +144,5 @@ urlpatterns = [
     path('caregiver/assignment/<int:assignment_id>/complete/', CaregiverCompleteCareView.as_view(), name='caregiver_complete_care_id'),
     path('caregiver/care-history/', CaregiverCareHistoryView.as_view(), name='caregiver_care_history'),
     path('caregiver/complaints/', CaregiverComplaintsView.as_view(), name='caregiver_complaints'),
+    path('caregiver/profile/', CaregiverProfileView.as_view(), name='caregiver_profile'),
 ]

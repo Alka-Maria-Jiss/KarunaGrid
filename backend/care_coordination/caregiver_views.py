@@ -1,11 +1,14 @@
 import os
 import uuid
 import logging
+import re
 from datetime import datetime
 from django.db import transaction
 from django.db.models import Q, Avg, Count
 from django.utils import timezone
 from django.core.files.storage import default_storage
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -13,6 +16,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from accounts.models import (
     Role,
+    User,
     Caregiver,
     Patient,
     Nurse,
@@ -872,3 +876,191 @@ class CaregiverComplaintsView(APIView):
             "message": "Complaint submitted successfully. Our nursing team will review and resolve it promptly.",
             "complaint": CaregiverComplaintSerializer(complaint).data
         }, status=status.HTTP_201_CREATED)
+
+
+# ============================================================================
+# 5. CAREGIVER PROFILE & EDIT PROFILE VIEWS
+# ============================================================================
+
+class CaregiverProfileView(APIView):
+    """
+    View and update profile information for the authenticated Caregiver.
+    Provides personal details, care qualifications, service zone, and password changes.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        caregiver = get_authenticated_caregiver(request)
+        if not caregiver:
+            return Response({"detail": "Access restricted to Caregivers only."}, status=status.HTTP_403_FORBIDDEN)
+
+        def clean_na(val):
+            if val is None or str(val).strip().upper() == 'N/A':
+                return ""
+            return str(val).strip()
+
+        data = {
+            "caregiver_id": caregiver.caregiver_id,
+            "caregiver_code": f"KG-CGV-{str(caregiver.caregiver_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": caregiver.name,
+            "email": request.user.email,
+            "phone": clean_na(caregiver.phone),
+            "house_name": clean_na(caregiver.house_name),
+            "place": clean_na(caregiver.place),
+            "panchayath": clean_na(caregiver.panchayath),
+            "ward_no": str(caregiver.ward_no) if caregiver.ward_no is not None else "",
+            "pincode": clean_na(caregiver.pincode),
+            "qualifications": clean_na(caregiver.qualifications),
+            "certifications": clean_na(caregiver.certifications),
+            "specialization": caregiver.specialization or "General Palliative Care",
+            "experience_years": caregiver.experience_years or "1+ years",
+            "availability_notes": clean_na(caregiver.availability_notes),
+            "is_available": caregiver.is_available,
+            "verification_status": caregiver.verification_status,
+            "rejection_reason": caregiver.rejection_reason,
+            "identity_proof_path": caregiver.identity_proof_path,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": caregiver.created_at.isoformat() if caregiver.created_at else None,
+            "updated_at": caregiver.updated_at.isoformat() if caregiver.updated_at else None,
+        }
+        return Response(data, status=status.HTTP_200_OK)
+
+    def put(self, request, *args, **kwargs):
+        caregiver = get_authenticated_caregiver(request)
+        if not caregiver:
+            return Response({"detail": "Access restricted to Caregivers only."}, status=status.HTTP_403_FORBIDDEN)
+
+        errors = {}
+
+        # 1. Name validation
+        name = request.data.get('name')
+        if name is not None:
+            name_val = str(name).strip()
+            if not name_val:
+                errors['name'] = ["Caregiver's Full Name cannot be empty."]
+            elif len(name_val) > 100:
+                errors['name'] = ["Full Name cannot exceed 100 characters."]
+            else:
+                caregiver.name = name_val
+
+        # 2. Phone validation
+        phone = request.data.get('phone')
+        if phone is not None:
+            phone_val = str(phone).strip()
+            if phone_val and phone_val.upper() != 'N/A' and not re.match(r'^\d{10}$', phone_val):
+                errors['phone'] = ["Phone number must be a valid 10-digit number."]
+            else:
+                caregiver.phone = phone_val if phone_val.upper() != 'N/A' else ""
+
+        # 3. Address fields
+        if 'house_name' in request.data:
+            caregiver.house_name = str(request.data.get('house_name') or '').strip()
+        if 'place' in request.data:
+            caregiver.place = str(request.data.get('place') or '').strip()
+        if 'panchayath' in request.data:
+            caregiver.panchayath = str(request.data.get('panchayath') or '').strip()
+
+        # 4. Ward No validation
+        ward_no = request.data.get('ward_no')
+        if ward_no is not None and str(ward_no).strip():
+            try:
+                caregiver.ward_no = int(ward_no)
+            except (ValueError, TypeError):
+                errors['ward_no'] = ["Ward number must be a valid integer."]
+
+        # 5. Pincode validation
+        pincode = request.data.get('pincode')
+        if pincode is not None:
+            pincode_val = str(pincode).strip()
+            if pincode_val and pincode_val.upper() != 'N/A' and not re.match(r'^\d{6}$', pincode_val):
+                errors['pincode'] = ["Pincode must be a 6-digit number."]
+            else:
+                caregiver.pincode = pincode_val if pincode_val.upper() != 'N/A' else ""
+
+        # 6. Qualifications & Certifications
+        if 'qualifications' in request.data:
+            caregiver.qualifications = str(request.data.get('qualifications') or '').strip()
+        if 'certifications' in request.data:
+            caregiver.certifications = str(request.data.get('certifications') or '').strip()
+        if 'specialization' in request.data:
+            caregiver.specialization = str(request.data.get('specialization') or '').strip()
+        if 'experience_years' in request.data:
+            caregiver.experience_years = str(request.data.get('experience_years') or '').strip()
+        if 'availability_notes' in request.data:
+            caregiver.availability_notes = str(request.data.get('availability_notes') or '').strip()
+        if 'is_available' in request.data:
+            caregiver.is_available = bool(request.data.get('is_available'))
+
+        # 7. Email / Username validation and update
+        email = request.data.get('email')
+        if email is not None:
+            email_val = str(email).strip().lower()
+            if not email_val:
+                errors['email'] = ["Email / Username cannot be empty."]
+            elif not re.match(r'^[^@]+@[^@]+\.[^@]+$', email_val):
+                errors['email'] = ["Please enter a valid email address."]
+            elif email_val != request.user.email.lower():
+                if User.objects.filter(email__iexact=email_val).exclude(user_id=request.user.user_id).exists():
+                    errors['email'] = ["An account with this email / username already exists."]
+                else:
+                    request.user.email = email_val
+
+        # 8. Password change validation and update
+        new_password = request.data.get('new_password')
+        current_password = request.data.get('current_password')
+        confirm_password = request.data.get('confirm_password')
+
+        if new_password:
+            if current_password is not None and not request.user.check_password(current_password):
+                errors['current_password'] = ["Current password is incorrect."]
+            if confirm_password is not None and new_password != confirm_password:
+                errors['confirm_password'] = ["New passwords do not match."]
+            try:
+                validate_password(new_password, user=request.user)
+            except DjangoValidationError as e:
+                errors['new_password'] = list(e.messages)
+
+        if errors:
+            return Response({"errors": errors, "message": "Please correct the validation errors."}, status=status.HTTP_400_BAD_REQUEST)
+
+        caregiver.save()
+        if new_password and 'new_password' not in errors:
+            request.user.set_password(new_password)
+        request.user.save()
+
+        updated_data = {
+            "caregiver_id": caregiver.caregiver_id,
+            "caregiver_code": f"KG-CGV-{str(caregiver.caregiver_id).zfill(4)}",
+            "user_id": request.user.user_id,
+            "name": caregiver.name,
+            "email": request.user.email,
+            "phone": caregiver.phone or "",
+            "house_name": caregiver.house_name or "",
+            "place": caregiver.place or "",
+            "panchayath": caregiver.panchayath or "",
+            "ward_no": str(caregiver.ward_no) if caregiver.ward_no is not None else "",
+            "pincode": caregiver.pincode or "",
+            "qualifications": caregiver.qualifications or "",
+            "certifications": caregiver.certifications or "",
+            "specialization": caregiver.specialization or "General Palliative Care",
+            "experience_years": caregiver.experience_years or "1+ years",
+            "availability_notes": caregiver.availability_notes or "",
+            "is_available": caregiver.is_available,
+            "verification_status": caregiver.verification_status,
+            "rejection_reason": caregiver.rejection_reason,
+            "identity_proof_path": caregiver.identity_proof_path,
+            "role": request.user.role,
+            "account_status": "Active" if request.user.is_active else "Inactive",
+            "is_active": request.user.is_active,
+            "created_at": caregiver.created_at.isoformat() if caregiver.created_at else None,
+            "updated_at": caregiver.updated_at.isoformat() if caregiver.updated_at else None,
+        }
+
+        return Response({
+            "message": "Caregiver profile updated successfully.",
+            "profile": updated_data
+        }, status=status.HTTP_200_OK)
+

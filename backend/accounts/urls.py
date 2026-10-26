@@ -18,6 +18,7 @@ from care_coordination.caregiver_views import (
     CaregiverCompleteCareView,
     CaregiverCareHistoryView,
     CaregiverComplaintsView,
+    CaregiverProfileView,
 )
 from .views import (
     RegisterView,
@@ -205,5 +206,6 @@ urlpatterns = [
     path('caregiver/assignment/<int:assignment_id>/complete/', CaregiverCompleteCareView.as_view(), name='accounts_caregiver_complete_care_id'),
     path('caregiver/care-history/', CaregiverCareHistoryView.as_view(), name='accounts_caregiver_care_history'),
     path('caregiver/complaints/', CaregiverComplaintsView.as_view(), name='accounts_caregiver_complaints'),
+    path('caregiver/profile/', CaregiverProfileView.as_view(), name='accounts_caregiver_profile'),
 ]
 

@@ -1045,7 +1045,9 @@ class CurrentUserProfileView(APIView):
                 "qualifications": c.qualifications,
                 "certifications": c.certifications,
                 "specialization": c.specialization,
+                "name": c.name,
                 "availability_notes": c.availability_notes,
+                "experience_years": c.experience_years,
                 "identity_proof_path": c.identity_proof_path,
             }
         elif user.role == Role.DOCTOR and hasattr(user, 'doctor'):

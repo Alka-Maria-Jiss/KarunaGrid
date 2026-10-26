@@ -12,7 +12,7 @@ const roleBadges = {
   admin: { label: 'Admin Portal', icon: ShieldCheck, color: 'bg-purple-100 text-purple-900 border-purple-300' },
 };
 
-export default function DashboardLayout({ user, onLogout, children }) {
+export default function DashboardLayout({ user, onLogout, onNavigateToProfile, children }) {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef(null);
 
@@ -90,7 +90,23 @@ export default function DashboardLayout({ user, onLogout, children }) {
                     <p className="text-[11px] text-[#7b776c] truncate">{user?.email}</p>
                   </div>
 
-                  <div className="pt-1">
+                  {onNavigateToProfile && (
+                    <div className="py-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowProfileMenu(false);
+                          onNavigateToProfile();
+                        }}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-xs font-bold text-[#4a473d] hover:bg-[#f4ede0] hover:text-[#1e1b14] rounded-xl transition-colors text-left cursor-pointer"
+                      >
+                        <User className="w-4 h-4 text-[#7b776c]" />
+                        <span>My Profile</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className={`pt-1 ${onNavigateToProfile ? 'border-t border-[#f2ece1]' : ''}`}>
                     <button
                       type="button"
                       onClick={onLogout}

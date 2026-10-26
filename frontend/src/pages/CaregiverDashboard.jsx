@@ -27,12 +27,22 @@ import {
 import apiClient from '../api/apiClient';
 import { useToast } from '../context/ToastContext';
 import { getSecureDocumentUrl, openSecureDocument } from '../utils/documentUtils';
+import CaregiverProfileView from '../components/caregiver/CaregiverProfileView';
 
 export default function CaregiverDashboard({ user, onLogout }) {
-  const status = (user?.status || user?.details?.verification_status || 'PENDING').toUpperCase();
+  const [currentUser, setCurrentUser] = useState(user);
+
+  useEffect(() => {
+    if (user) {
+      setCurrentUser(user);
+    }
+  }, [user]);
+
+  const activeUser = currentUser || user;
+  const status = (activeUser?.status || activeUser?.details?.verification_status || 'PENDING').toUpperCase();
   const isApproved = status === 'APPROVED';
-  const rejectionReason = user?.rejection_reason || user?.details?.rejection_reason;
-  const details = user?.details || {};
+  const rejectionReason = activeUser?.rejection_reason || activeUser?.details?.rejection_reason;
+  const details = activeUser?.details || {};
 
   const [activeTab, setActiveTab] = useState('assignment'); // 'assignment' | 'requests' | 'history' | 'complaints' | 'profile'
   const [activeAssignmentData, setActiveAssignmentData] = useState(null);
@@ -183,7 +193,11 @@ export default function CaregiverDashboard({ user, onLogout }) {
   const currentAssignment = activeAssignmentData?.assignment;
 
   return (
-    <DashboardLayout user={user} onLogout={onLogout}>
+    <DashboardLayout
+      user={activeUser}
+      onLogout={onLogout}
+      onNavigateToProfile={() => setActiveTab('profile')}
+    >
       <div className="space-y-6 max-w-6xl mx-auto">
         
         {/* TOP STATUS BANNERS */}
@@ -651,63 +665,16 @@ export default function CaregiverDashboard({ user, onLogout }) {
           </div>
         )}
 
-        {/* TAB 5: PROFILE & VERIFICATION OVERVIEW */}
+        {/* TAB 5: PROFILE VIEW & EDIT PROFILE */}
         {(activeTab === 'profile' || !isApproved) && (
-          <div className="bg-white rounded-3xl border border-[#e9e2d5] p-6 shadow-xs space-y-6">
-            <div className="flex items-center justify-between border-b border-[#f0ece1] pb-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-[#f4ede0] rounded-2xl text-[#645e45]">
-                  <Heart className="w-6 h-6" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-[#1e1b14]">{user?.name || details.name || 'Caregiver'}</h2>
-                  <p className="text-xs text-[#7b776c] font-semibold">{user?.email}</p>
-                </div>
-              </div>
-              <span className={`px-3 py-1 text-xs font-extrabold rounded-full border ${
-                status === 'APPROVED' ? 'bg-emerald-100 text-emerald-900 border-emerald-300' :
-                status === 'REJECTED' ? 'bg-rose-100 text-rose-900 border-rose-300' :
-                'bg-amber-100 text-amber-900 border-amber-300'
-              }`}>
-                {status}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-xs">
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-[#7b776c]">Contact & Locality</h4>
-                <p className="text-sm font-semibold text-[#1e1b14]">Phone: <span className="font-normal">{details.phone || 'N/A'}</span></p>
-                <p className="text-sm font-semibold text-[#1e1b14]">House: <span className="font-normal">{details.house_name || 'N/A'}</span></p>
-                <p className="text-sm font-semibold text-[#1e1b14]">Place: <span className="font-normal">{details.place || 'N/A'}</span></p>
-                <p className="text-sm font-semibold text-[#1e1b14]">Panchayath: <span className="font-normal">{details.panchayath || 'N/A'}</span></p>
-                <p className="text-sm font-semibold text-[#1e1b14]">Ward / Pincode: <span className="font-normal">Ward {details.ward_no || '-'}, {details.pincode || '-'}</span></p>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-[#7b776c]">Professional Qualifications</h4>
-                <p className="text-sm font-semibold text-[#1e1b14]">Qualifications: <span className="font-normal">{details.qualifications || 'None listed'}</span></p>
-                <p className="text-sm font-semibold text-[#1e1b14]">Certifications: <span className="font-normal">{details.certifications || 'None listed'}</span></p>
-                <p className="text-sm font-semibold text-[#1e1b14]">Specialization: <span className="font-normal">{details.specialization || 'General Care'}</span></p>
-                <p className="text-sm font-semibold text-[#1e1b14]">Experience: <span className="font-normal">{details.experience_years || '1+ years'}</span></p>
-              </div>
-
-              <div className="space-y-3">
-                <h4 className="text-[11px] font-extrabold uppercase tracking-wider text-[#7b776c]">Verification Proof</h4>
-                {details.identity_proof_path && (
-                  <a
-                    href={getSecureDocumentUrl('caregiver_identity_proof', details.caregiver_id)}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={(e) => { e.preventDefault(); openSecureDocument('caregiver_identity_proof', details.caregiver_id); }}
-                    className="inline-flex items-center gap-2 text-xs font-bold text-[#645e45] hover:underline bg-[#f8f3eb] px-3 py-2.5 rounded-xl border border-[#e8dccb]"
-                  >
-                    <FileText className="w-4 h-4" />
-                    <span>View Uploaded Identity Proof</span>
-                  </a>
-                )}
-              </div>
-            </div>
-          </div>
+          <CaregiverProfileView
+            user={activeUser}
+            onUpdateUser={(updated) => {
+              setCurrentUser(updated);
+              loadCaregiverData();
+            }}
+            onRefresh={loadCaregiverData}
+          />
         )}
 
         {/* MODAL 1: COMPLETE PATIENT CARE CONFIRMATION (Section 17) */}
