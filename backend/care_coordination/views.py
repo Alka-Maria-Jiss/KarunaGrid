@@ -2297,6 +2297,9 @@ class NurseCaregiverAssignmentView(APIView):
             assignment.ended_at = timezone.now()
             assignment.save(update_fields=['status', 'ended_at', 'updated_at'])
 
+            assignment.caregiver.is_available = True
+            assignment.caregiver.save(update_fields=['is_available'])
+
             return Response({
                 "message": f"Caregiver assignment for {assignment.patient.name} has been ended.",
                 "assignment_id": assignment.assignment_id,
@@ -2321,6 +2324,16 @@ class NurseCaregiverAssignmentView(APIView):
         if not patient:
             return Response({"errors": {"patient_id": ["Registered patient not found."]}}, status=status.HTTP_404_NOT_FOUND)
 
+        # Enforce strict 1:1 rule: A caregiver can only be assigned to one active patient at a time
+        active_cg_assignment = CaregiverPatientAssignment.objects.filter(
+            caregiver=caregiver, status=AssignmentStatus.ACTIVE
+        ).first()
+        if active_cg_assignment and active_cg_assignment.patient_id != patient.patient_id:
+            return Response(
+                {"errors": {"detail": [f"Caregiver {caregiver.name} is already actively assigned to {active_cg_assignment.patient.name}. A caregiver can only be assigned to one patient at a time."]}},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # End any previous active assignment for this patient
         CaregiverPatientAssignment.objects.filter(patient=patient, status=AssignmentStatus.ACTIVE).update(
             status=AssignmentStatus.ENDED, ended_at=timezone.now()
@@ -2332,6 +2345,8 @@ class NurseCaregiverAssignmentView(APIView):
             assigned_by_nurse=nurse,
             status=AssignmentStatus.ACTIVE
         )
+        caregiver.is_available = False
+        caregiver.save(update_fields=['is_available'])
 
         Notification.objects.create(
             user=patient.user,

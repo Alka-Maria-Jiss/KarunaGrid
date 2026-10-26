@@ -968,11 +968,16 @@ export default function NurseCaregiverManagement() {
                   className="w-full p-2.5 bg-[#fcfaf6] border border-[#e0d9cc] rounded-xl text-xs text-[#1e1b14] focus:outline-none focus:border-[#645e45]"
                 >
                   <option value="">-- Choose Caregiver --</option>
-                  {approvedCaregivers.map((cg) => (
-                    <option key={cg.caregiver_id} value={cg.caregiver_id}>
-                      {cg.name} ({cg.specialization || 'Caregiver'} - {cg.place})
-                    </option>
-                  ))}
+                  {approvedCaregivers.map((cg) => {
+                    const isAlreadyAssigned = assignments.some(
+                      (a) => a.caregiver_id === cg.caregiver_id && a.status === 'Active'
+                    );
+                    return (
+                      <option key={cg.caregiver_id} value={cg.caregiver_id} disabled={isAlreadyAssigned}>
+                        {cg.name} ({cg.specialization || 'Caregiver'} - {cg.place}) {isAlreadyAssigned ? '— [Already Assigned]' : '— [Available]'}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
